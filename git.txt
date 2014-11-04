@@ -1,0 +1,100 @@
+设置用户名
+git config --global user.name "kk"
+设置用户邮箱
+git config --global user.email "kk"
+查看设置
+git config --list
+可以通过以下命令获取git帮助
+git help
+可以通过以下命令获取特定指令的帮助
+git help 特定指令
+初始化一个新的git仓库
+1创建一个文件夹
+mkdir kk
+2.在文件夹内初始化git，创建git仓库
+cd kk
+git init
+状态
+git status
+
+git add readme
+
+提交到仓库
+git commit -m “描述信息”
+git log历史记录
+git commit -a -m
+删除文件
+rm readme
+从git中删除文件
+git rm readme
+提交操作
+git commit -m “delete readme”
+重命名文件
+git mv 文件1 文件2
+git commi -m “信息”
+
+比较修改内容
+git diff
+$ git log --pretty=oneline
+3628164fb26d48395383f8f31179f24e0882e1e0 append GPL
+ea34578d5496d7dd233c827ed32a8cd576c5ee85 add distributed
+cb926e7ea50ad11b8f9e909c05226233bf755030 wrote a readme file
+$ git reset --hard HEAD^
+HEAD is now at ea34578 add distributed
+
+$ git reset --hard 3628164
+HEAD is now at 3628164 append GPL
+在Git中，总是有后悔药可以吃的。当你用$ git reset --hard HEAD^回退到“add distributed”版本时，再想恢复到“append GPL”，就必须找到“append GPL”的commit id。Git提供了一个命令git reflog用来记录你的每一次命令：
+
+
+你可以发现，Git会告诉你，git checkout -- file可以丢弃工作区的修改：
+
+$ git checkout -- readme.txt
+
+Git同样告诉我们，用命令git reset HEAD file可以把暂存区的修改撤销掉（unstage），重新放回工作区：
+
+$ git reset HEAD readme.txt
+Unstaged changes after reset:
+M       readme.txt
+
+git提交代码时，出现这个错误“error: The requested URL returned error: 403 Forbidden while accessing https”
+
+     解决方法：
+
+     编辑.git目录下的config文件即可。
+
+vim .git/config
+#修改对于的配置
+#原来的url = https://github.com/elitecodegroovy/PhoenixC.git
+
+url = https://elitecodegroovy@github.com/elitecodegroovy/PhoenixC.git
+
+
+     重新提交，弹出的对话框中输入正确的passphrase即可。
+git config --global user.name "Peter Wang"
+git config --global user.email "happypeter1983@gmail.com"
+git log
+git log -p
+
+sudo apt-get install tig
+
+git commit -a
+git diff
+
+terminal
+
+git config --global core.editor vim
+git commit -a -v 
+git config --global alias.ci "commit -a -v"
+
+~/.gitconfig
+
+[user]
+    name = Peter Wang
+    email = happypeter1983@gmail.com
+[core]
+    editor = vim
+[alias]
+    ci = commit -a -v
+
+
