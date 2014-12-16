@@ -1,0 +1,1902 @@
+
+
+Monitor: 
+
+Process: 一个独立运行单位
+	系统资源：CPU时间，存储空间
+
+Process: 一个独立运行单位
+
+OS: VM
+	CPU: 
+		时间：切片
+			缓存：缓存当前程序数据
+
+		进程切换：保存现场、恢复现场
+
+	内存：线性地址 <-- 物理地址
+		空间：映射
+
+	I/O：
+		内核 --> 进程
+
+
+进程描述符：
+	进程元数据
+
+	双向链表
+
+
+Linux: 抢占
+
+系统时钟：时钟
+	tick: 滴答
+		时间解析度
+	100Hz
+	1000Hz
+
+时钟中断
+
+A: 5ms，1ms
+C: 
+
+进程类别：
+	交互式进程(I/O)
+	批处理进程(CPU)
+	实时进程(Real-time)
+
+
+	CPU: 时间片长，优先级低
+	IO：时间片短，优先级高
+
+
+Linux优先级：priority
+	实时优先级: 1-99，数字越小，优先级越低
+	静态优先级：100-139，数据越小，优先级越高   -20，19：100，139
+		0：120
+		实时优先级比静态优先级高
+
+	nice值：调整静态优先级
+
+
+
+
+调度类别：
+	实时进程：
+		SCHED_FIFO：First In First Out
+		SHCED_RR: Round Robin
+		SCHED_Other: 用来调度100-139之间的进程
+			100-139
+				10: 110
+				30: 115
+				50: 120
+				2: 130
+
+动态优先级：
+	dynamic priority = max (100, min (  static priority - bonus + 5, 139)) 
+		bonus: 0-10
+
+	110，10
+
+	110
+
+手动调整优先级：
+	100-139: nice
+		nice N COMMAND
+		renice -n # PID
+
+		chrt -p [prio] PID
+	1-99: 
+		chrt -f -p [prio] PID 
+		chrt -r -p [prio] PID
+
+		chrt -f -p [prio] COMMAND
+
+		ps -e -o class,rtprio,pri,nice,cmd
+
+
+
+
+
+
+CPU affinity: CPU姻亲关系
+
+numastat
+numactl
+numad
+
+
+taskset: 绑定进程至某CPU上
+	mask:
+		0x0000 0001
+
+0001: 0
+
+0x0000 0003
+
+0011：0和1
+
+0x0000 0005: 
+0101: 0和2
+
+0007
+0111：0-2号
+
+# taskset -p mask pid
+
+101, 3# CPU
+# taskset -p 0x00000003 101
+
+0100
+
+
+taskset -p -c 0-2,7 101
+
+
+应该将中断绑定至那些非隔离的CPU上，从而避免那些隔离的CPU处理中断程序；
+
+echo CPU_MASK > /proc/irq/<irq number>/smp_affinity
+
+
+
+sar -w
+	查看上下文切换的平均次数，以及进程创建的平均值；
+
+
+
+
+slab allocator:
+buddy system:
+
+	memcached: 
+
+MMU: Memory Management Unit
+	地址映射
+	内存保护
+
+
+进程：线性地址 --> 物理地址
+
+物理：页框
+	地址
+进程：页面
+	页面
+
+
+TLB: Transfer Lookaside Buffer
+
+sar -R: 观察内存分配与释放动态信息
+dstat --vm: 
+
+	
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Given this performance penalty, performance-sensitive applications should avoid regularly accessing remote memory in a NUMA topology system. The application should be set up so that it stays on a particular node and allocates memory from that node.
+To do this, there are a few things that applications will need to know:
+
+What is the topology of the system?
+Where is the application currently executing?
+Where is the closest memory bank?
+
+
+
+
+
+CPU affinity is represented as a bitmask. The lowest-order bit corresponds to the first logical CPU, and the highest-order bit corresponds to the last logical CPU. These masks are typically given in hexadecimal, so that 0x00000001 represents processor 0, and 0x00000003 represents processors 0 and 1.
+
+# taskset -p mask pid
+
+
+To launch a process with a given affinity, run the following command, replacing mask with the mask of the processor or processors you want the process bound to, and program with the program, options, and arguments of the program you want to run.
+
+# taskset mask -- program
+
+
+Instead of specifying the processors as a bitmask, you can also use the -c option to provide a comma-delimited list of separate processors, or a range of processors, like so:
+
+# taskset -c 0,5,7-9 -- myprogram
+
+
+
+
+
+numactl can also set a persistent policy for shared memory segments or files, and set the CPU affinity and memory affinity of a process. It uses the /sys file system to determine system topology.
+
+The /sys file system contains information about how CPUs, memory, and peripheral devices are connected via NUMA interconnects. Specifically, the /sys/devices/system/cpu directory contains information about how a system's CPUs are connected to one another. The /sys/devices/system/node directory contains information about the NUMA nodes in the system, and the relative distances between those nodes.
+
+numactl allows you to bind an application to a particular core or NUMA node, and to allocate the memory associated with a core or set of cores to that application.
+
+
+
+numastat displays memory statistics (such as allocation hits and misses) for processes and the operating system on a per-NUMA-node basis. By default, running numastat displays how many pages of memory are occupied by the following event categories for each node. Optimal CPU performance is indicated by low numa_miss and numa_foreign values.
+
+
+
+numad is an automatic NUMA affinity management daemon. It monitors NUMA topology and resource usage within a system in order to dynamically improve NUMA resource allocation and management (and therefore system performance).
+
+Depending on system workload, numad can provide benchmark performance improvements of up to 50%. To achieve these performance gains, numad periodically accesses information from the /proc file system to monitor available system resources on a per-node basis. The daemon then attempts to place significant processes on NUMA nodes that have sufficient aligned memory and CPU resources for optimum NUMA performance. Current thresholds for process management are at least 50% of one CPU and at least 300 MB of memory. numad attempts to maintain a resource utilization level, and rebalances allocations when necessary by moving processes between NUMA nodes.
+
+
+To restrict numad management to a specific process, start it with the following options.
+
+# numad -S 0 -p pid
+
+-p pid
+Adds the specified pid to an explicit inclusion list. The process specified will not be managed until it meets the numad process significance threshold.
+
+-S mode
+The -S parameter specifies the type of process scanning. Setting it to 0 as shown limits numad management to explicitly included processes.
+
+
+To stop numad, run:
+
+# numad -i 0
+Stopping numad does not remove the changes it has made to improve NUMA affinity. If system use changes significantly, running numad again will adjust affinity to improve performance under the new conditions.
+
+
+
+
+
+
+
+
+
+Using Valgrind to Profile Memory Usage
+
+Profiling Memory Usage with Memcheck
+
+Memcheck is the default Valgrind tool, and can be run with valgrind program, without specifying --tool=memcheck. It detects and reports on a number of memory errors that can be difficult to detect and diagnose, such as memory access that should not occur, the use of undefined or uninitialized values, incorrectly freed heap memory, overlapping pointers, and memory leaks. Programs run ten to thirty times more slowly with Memcheck than when run normally.
+
+Profiling Cache Usage with Cachegrind
+
+Cachegrind simulates your program's interaction with a machine's cache hierarchy and (optionally) branch predictor. It tracks usage of the simulated first-level instruction and data caches to detect poor code interaction with this level of cache; and the last-level cache, whether that is a second- or third-level cache, in order to track access to main memory. As such, programs run with Cachegrind run twenty to one hundred times slower than when run normally.
+
+Profiling Heap and Stack Space with Massif
+
+Massif measures the heap space used by a specified program; both the useful space, and any additional space allocated for book-keeping and alignment purposes. It can help you reduce the amount of memory used by your program, which can increase your program's speed, and reduce the likelihood that your program will exhaust the swap space of the machine on which it executes. Massif can also provide details about which parts of your program are responsible for allocating heap memory. Programs run with Massif run about twenty times more slowly than their normal execution speed.
+
+
+
+
+
+Capacity-related Kernel Tunables
+
+
+
+
+1、内存区域划分：
+32bits: ZONE_DMA, ZONE_NORMAL, ZONE_HIGHMEM
+64bits: ZONE_DMA, ZONE_DMA32, ZONE_NORMAL
+
+2、MMU：
+10bit, 10bit, 12bit PTE
+
+3、TLB
+HugePage
+
+CPU
+
+O(1): 100-139
+SCHED_Other: CFS
+
+
+1-99
+SCHED_FIFO
+SCHED_RR
+
+动态优先级：
+
+sar -p
+mpstat
+iostat -c
+dstat -c
+	--top-cpu
+top
+
+sar -q
+vmstat
+uptime
+
+
+内存子系统组件：
+	slab allocator
+	buddy system
+	kswapd
+	pdflush
+	mmu
+
+	虚拟化环境：
+		PA --> HA --> MA
+		虚拟机转换：PA --> HA
+
+		GuestOS, OS
+		Shadow PT
+
+Memory: 
+	TLB：提升性能
+
+
+
+strace:
+	strace COMMAND: 查看命令的syscall
+	strace -p PID: 查看已经启动进程的syscall
+
+	-c: 只输出其概括信息；
+	-o FILE: 将追踪结果保存至文件中，以供后续分析使用；
+
+
+
+1、降低微型内存对象的系统开销
+	slab
+2、缩减慢速子系统的服务时间
+	使用buffer cache缓存文件元数据据；
+	使用page cache缓存DISK IO；
+	使用shm完成进程间通信；
+	使用buffer cache、arp cache和connetion tracking提升网络IO性能；
+
+
+
+过量使用：
+	2，2，2，2：8  
+
+物理内存的过量使用是以swap为前提的：
+	可以超出物理内存一部分：
+		Swap
+
+2.5G
+
+
+vfs_cache_pressure：
+	0：不回收dentries和inodes; 
+	1-99: 倾向于不回收；
+	100: 倾向性与page cache和swap cache相同；
+	100+：倾向于回收；
+
+
+
+
+setting the /proc/sys/vm/panic_on_oom parameter to 0 instructs the kernel to call the oom_killer function when OOM occurs
+
+oom_adj
+Defines a value from -16 to 15 that helps determine the oom_score of a process. The higher the oom_score value, the more likely the process will be killed by the oom_killer. Setting a oom_adj value of 
+
+
+
+
+-16-15：帮助计算oom_score
+-17：disables the oom_killer for that process.
+
+
+
+
+
+
+
+进程间通信管理类命令：
+ipcs
+ipcrm
+
+shm:
+	shmmni: 系统级别，所允许使用的共享内存段上限；
+	shmall: 系统级别，能够为共享内存分配使用的最大页面数；
+	shmmax: 单个共享内存段的上限；
+messages:
+	msgmnb: 单个消息队列的上限，单位为字节；
+	msgmni: 系统级别，消息队列个数上限；
+	msgmax: 单个消息大小的上限，单位为字节；
+
+
+
+手动清写脏缓存和缓存：
+	sync
+	echo s > /proc/sysrq-trigger
+
+回收：
+
+
+HugePage：TLB
+IPC：
+pdflush
+slab
+swap
+oom
+
+I/O, Filesystem, Network
+
+
+Note that the I/O numbers reported by vmstat are aggregations of all I/O to all devices. Once you have determined that there may be a performance gap in the I/O subsystem, you can examine the problem more closely with iostat, which will break down the I/O reporting by device. You can also retrieve more detailed information, such as the average request size, the number of reads and writes per second, and the amount of I/O merging going on.
+
+vmstat命令和dstat -r用来查看整体IO活动状况；
+iostat可以查看单个设备的IO活动状况；
+
+
+
+slice_idle = 0
+quantum = 64
+group_idle = 1
+
+
+
+blktrace
+blkparse
+btt
+
+
+fio
+io-stress
+iozone
+
+
+iostat
+
+
+ext3
+
+ext4: 16TB
+
+
+
+xfs:
+
+
+
+
+
+
+
+
+
+
+mount -o nobarrier,noatime 
+
+ext3: noatime
+	data=ordered, journal, writeback
+
+ext2, ext3
+
+
+
+Tuning Considerations for File Systems
+
+ Formatting Options:
+ 	File system block size
+
+Mount Options
+	Barrier: 为了保证元数据写入的安全性；可以使用nobarrier
+	Access Time (noatime)
+		Historically, when a file is read, the access time (atime) for that file must be updated in the inode metadata, which involves additional write I/O
+	Increased read-ahead support
+		# blockdev -getra device
+		# blockdev -setra N device
+
+Ext4 is supported for a maximum file system size of 16 TB and a single file maximum size of 16TB. It also removes the 32000 sub-directory limit present in ext3.
+
+优化Ext4:
+1、格式大文件系统化时延迟inode的写入；
+	-E lazy_itable_init=1
+# mkfs.ext4 -E lazy_itable_init=1 /dev/sda5
+
+
+
+2、关闭Ext4的自动fsync()调用；
+	-o noauto_da_alloc
+
+mount -o noauto_da_alloc
+
+3、降低日志IO的优先级至与数据IO相同；
+	-o journal_ioprio=n 
+		n的用效取值范围为0-7，默认为3；
+
+优化xfs:
+	xfs非常稳定且高度可扩展，是64位日志文件系统，因此支持非常大的单个文件及文件系统。在RHEL6.4上，其默认的格式化选项及挂载选项均已经达到很优的工作状态。
+
+
+
+
+dd
+iozone
+bonnie++
+
+
+
+
+
+I/O:
+	I/O scheduler: CFQ, deadline, NOOP
+
+EXT4:
+
+
+
+
+
+
+
+net.ipv4.tcp_window_scaling = 1
+
+net.ipv4.tcp_syncookies = 1
+
+net.core.rmem_max = 12582912
+net.core.rmem_default 
+
+net.core.netdev_max_backlog = 5000
+
+net.core.wmem_max = 12582912
+net.core.wmem_default 
+
+net.ipv4.tcp_rmem= 10240 87380 12582912
+net.ipv4.tcp_wmem= 10240 87380 12582912
+
+net.ipv4.tcp_tw_reuse=1
+
+
+
+Set the max OS send buffer size (wmem) and receive buffer size (rmem) to 12 MB for queues on all protocols. In other words set the amount of memory that is allocated for each TCP socket when it is opened or created while transferring files
+
+
+netstat -an
+ss
+lsof
+
+
+
+ethtool 
+
+
+Systemtap
+Oprofile
+Valgrind
+
+
+
+
+
+
+
+
+
+
+perf 
+
+perf stat
+Task-clock-msecs：CPU 利用率，该值高，说明程序的多数时间花费在 CPU 计算上而非 IO。
+Context-switches：进程切换次数，记录了程序运行过程中发生了多少次进程切换，频繁的进程切换是应该避免的。
+Cache-misses：程序运行过程中总体的 cache 利用情况，如果该值过高，说明程序的 cache 利用不好
+CPU-migrations：表示进程 t1 运行过程中发生了多少次 CPU 迁移，即被调度器从一个 CPU 转移到另外一个 CPU 上运行。
+Cycles：处理器时钟，一条机器指令可能需要多个 cycles，
+Instructions: 机器指令数目。
+IPC：是 Instructions/Cycles 的比值，该值越大越好，说明程序充分利用了处理器的特性。
+Cache-references: cache 命中的次数
+Cache-misses: cache 失效的次数。
+通过指定 -e 选项，您可以改变 perf stat 的缺省事件 ( 关于事件，在上一小节已经说明，可以通过 perf list 来查看 )。假如您已经有很多的调优经验，可能会使用 -e 选项来查看您所感兴趣的特殊的事件。
+
+
+perf Top
+
+使用 perf stat 的时候，往往您已经有一个调优的目标。也有些时候，您只是发现系统性能无端下降，并不清楚究竟哪个进程成为了贪吃的 hog。此时需要一个类似 top 的命令，列出所有值得怀疑的进程，从中找到需要进一步审查的家伙。类似法制节目中办案民警常常做的那样，通过查看监控录像从茫茫人海中找到行为古怪的那些人，而不是到大街上抓住每一个人来审问。
+Perf top 用于实时显示当前系统的性能统计信息。该命令主要用来观察整个系统当前的状态，比如可以通过查看该命令的输出来查看当前系统最耗时的内核函数或某个用户进程。
+
+
+使用 perf record, 解读 report
+
+使用 top 和 stat 之后，您可能已经大致有数了。要进一步分析，便需要一些粒度更细的信息。比如说您已经断定目标程序计算量较大，也许是因为有些代码写的不够精简。那么面对长长的代码文件，究竟哪几行代码需要进一步修改呢？这便需要使用 perf record 记录单个函数级别的统计信息，并使用 perf report 来显示统计结果。
+您的调优应该将注意力集中到百分比高的热点代码片段上，假如一段代码只占用整个程序运行时间的 0.1%，即使您将其优化到仅剩一条机器指令，恐怕也只能将整体的程序性能提高 0.1%。
+
+
+
+Disk:
+	IO Scheduler:
+		CFQ
+		deadline
+		anticipatory
+		NOOP
+
+		/sys/block/<device>/queue/scheduler
+
+Memory:
+	MMU
+	TLB
+
+	vm.swappiness={0..100}：使用交换分区的倾向性, 60
+	overcommit_memory=2: 过量使用
+	overcommit_ratio=50：
+		swap+RAM*ratio
+			swap: 2G
+			RAM: 8G
+				memory=2G+4G=6G
+
+	充分使用物理内存：
+		1、swap跟RAM一样大；swappiness=0;
+		2、	overcommit_memory=2, overcommit_ratio=100：swappiness=0;
+			memory: swap+ram
+
+
+tcp_max_tw_buckets: 调大
+	tw：连接个数
+		established --> tw 
+
+IPC: 
+	message
+		msgmni
+		msgmax
+		msgmnb
+	shm
+		shmall
+		shmmax
+		shmmni
+
+sar, dstat, vmstat, mpstat, iostat, top, free, iotop, uptime, cat /proc/meminfo, ss, netstat, lsof, time, perf, strace 
+
+blktrace, blkparse, btt
+
+dd, iozone, io-stress, fio
+
+l
+
+
+
+
+Intel: VT-x
+AMD: AMD-V 
+
+
+Intel: EPT
+AMD: NPT
+
+
+
+Full-Virtualization: 完全虚拟化
+	CPU不支持硬件虚拟化技术：模拟特权指令: 模拟
+	CPU支持硬件虚拟化技术：VMM运行ring -1，而GuestOS运行在ring 0; HVM (Hardware-asistant VM)
+
+para-virtualization: 半虚拟化, pv
+	cpu, io, memory
+
+	PV on HVM:
+
+
+KVM: Virtulization
+	KVM：virtio(pv IO)
+
+
+Intel: IOMMU
+
+X86: 平台虚拟化技术
+	Intel: VT-x, EPT, IOMMU
+
+
+
+
+
+
+
+
+
+1974年，Popek和Goldberg在一篇论文中定义了“经典虚拟化(Classical virtualization)”的基本需求，他们认为，一款真正意义上的VMM至少要符合三个方面的标准：
+
+◇ 等价执行(Equivalient execution)：除了资源的可用性及时间上的不同之外，程序在虚拟化环境中及真实环境中的执行是完全相同的；
+◇ 性能(Performance)：指令集中的大部分指令要能够直接运行于CPU上；
+◇ 安全(Safety)：VMM要能够完全控制系统资源；
+
+
+1.1 x86平台实现虚拟化技术的挑战
+
+x86处理器有4个特权级别，Ring 0 ~ Ring 3，只有运行在Ring 0 ~ 2 级时，处理器才可以访问特权资源或执行特权指令；运行在 Ring 0级时，处理器可以运行所有的特权指令。x86平台上的操作系统一般只使用Ring 0和Ring 3这两个级别，其中，操作系统运行在Ring 0级，用户进程运行在 Ring 3 级。
+ 
+
+1.1.1 特权级压缩(ring compression)
+
+为了满足上面所述的需求，VMM自身必须运行在Ring 0级，同时为了避免GuestOS控制系统资源，GuestOS不得不降低自身的运行级别而运行于Ring 3（Ring 1、2 不使用）。
+
+此外，VMM使用分页或段限制的方式保护物理内存的访问，但是64位模式下段限制不起作用，而分页又不区分Ring 0,1,2。为了统一和简化VMM的设计，GuestOS只能和用户进程一样运行在 Ring 3。VMM必须监视GuestOS对GDT、IDT等特权资源的设置，防止GuestOS运行在Ring 0级，同时又要保护降级后的GuestOS不受Guest进程的主动攻击或无意破坏。
+
+1.1.2 特权级别名（Ring Alias）
+
+设计上的原因，操作系统假设自己运行于ring 0，然而虚拟化环境中的GuestOS实际上运行于Ring 1或Ring 3，由此，VMM必须保证各GuestOS不能得知其正运行于虚拟机中这一事实，以免其打破前面的“等价执行”标准。例如，x86处理器的特权级别存放在CS代码段寄存器内，GuestOS却可以使用非特权PUSH指令将CS寄存器压栈，然后POP出来检查该值；又如，GuestOS在低特权级别时读取特权寄存器GDT、LDT、IDT和TR时并不发生异常。这些行为都不同于GuestOS的正常期望。
+
+1.1.3 地址空间压缩（Address Space Compression）
+
+地址空间压缩是指VMM必须在GuestOS的地址空间中保留一段供自己使用，这是x86虚拟化技术面临的另一个挑战。VMM可以完全运行于自有的地址空间，也可以部分地运行于GuestOS的地址空间。前一种方式，需在VMM模式与GuestOS模式之间切换，这会带来较大的开销；此外，尽管运行于自己的地址空间，VMM仍需要在GuestOS的地址空间保留出一部分来保存控制结构，如IDT和GDT。无论是哪一种方式，VMM必须保证自己用到地址空间不会受到GuestOS的访问或修改。
+
+1.1.4 非特权敏感指令
+
+x86使用的敏感指令并不完全隶属于特权指令集，VMM将无法正确捕获此类指令并作出处理。例如，非特权指令SMSW在寄存器中存储的机器状态就能够被GuestOS所读取，这违反了经典虚拟化理论的要求。
+
+1.1.5 静默特权失败(Silent Privilege Failures)
+
+x86的某些特权指令在失败时并不返回错误，因此，其错误将无法被VMM捕获，这将导致其违反经典虚拟化信条中的“等价执行”法则。
+
+1.1.6 中断虚拟化(Interrupt Virtualization)
+
+虚拟化环境中，屏蔽中断及非屏蔽中断的管理都应该由VMM进行；然而，GuestOS对特权资源的每次访问都会触发处理器异常，这必然会频繁屏蔽或启用中断，如果这些请求均由VMM处理，势必会极大影响整体系统性能。
+
+1.2  X86平台虚拟化
+
+完整意义上的计算机由硬件平台和软件平台共同组成。根据计算机体系结构理论，其硬件平台包括CPU、内存和各种I/O设备；而软件平台则包括BIOS、操作系统、运行时库及各种应用程序等。对于主机虚拟化技术来讲，其主要负责虚拟硬件平台及BIOS，而操作系统、运行时库及各种应用程序可以使用以往在物理平台上各种现有技术及产品。
+
+
+
+
+网络模型：
+
+
+
+x86: 
+	CPU: 
+		Intel VT-x
+		AMD AMD-V
+
+	MMU:
+		Intel EPT
+		AMD   NPT
+
+	IO:
+		Intel IOMMU
+
+
+
+emulated: Qemu
+
+OS + VMM
+
+bare-metal: VMM + Guest
+
+虚拟化种类：
+	Full Virtualization
+	Para Virtualization
+		GuestOS的内核了解自己工作在VMM之上；
+	Emulator
+	OS-Level, (Container)
+		OpenVZ, UML
+	Library Virtualization
+		Wine, cywin
+	Application Virtulization
+
+Xen, KVM
+
+Xen
+
+
+RHEL5.3, Xen
+RHEL5.4: Xen 和 KVM(64bits)
+
+RHEL6.0: KVM(64bits)
+
+
+RHEL6.0:　DomU, 但不能运行为Dom0
+
+
+Linux: 2.6.24+ pvops framework
+	DomU
+Linux: 2.6.37 (3.0+)
+	Dom0
+
+
+RHEL 6.4 64bits:
+	1、
+	
+
+"Development Tools" "Server Platform Development" "Desktop Platform Development" ""
+
+Xen
+
+
+
+kernel /xen.gz
+module /
+module /
+
+Xen-4.0
+	xend/xm
+
+
+Xen-4.1 
+	xl, xend/xm
+	
+
+Xen-4.2
+	xl
+
+
+Xen: 虚拟机平台
+	xm/xl
+
+Qemu: qemu 
+
+libvirt
+	libvirtd/virsh
+	virt-manager: GUI
+	virt-install: 
+
+IaaS: 
+
+OpenStack
+CloudStack
+OpenNebular
+
+
+
+
+KVM/Qemu --> Virsh , qemu-kvm
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Dom0: 2.6.37
+
+关键性驱动及优化：3.0
+
+PV, HVM, PV on HVM
+
+Linux pvops framework: 2.6.24
+
+
+
+
+1.4.2 常见的工具栈
+
+◇ Default / XEND
+
+Xen 4.0及之前的版本中默认使用的工具栈，Xen 4.1提供了新的轻量级工具栈xl，但仍然保留了对Xend/xm的支持，但Xen 4.2及之后的版本已弃用。但xl在很大程度上保持了与xm的兼容。
+
+◇ Default / XL
+
+xl是基于libxenlight创建的轻量级命令行工具栈，并从Xen 4.1起成为默认的工具栈。xl与Xend的功能对比请参照http://wiki.xen.org/wiki/XL_vs_Xend_Feature_Comparison。
+
+◇ XAPI / XE
+
+XAPI即Xen管理API(The Xen management API)，它是Citrix XenServer和XCP默认使用的工具栈。目前，其移植向libxenlight的工作正进行中。XAPI是目前功能最通用且功能最完备的Xen工具栈，CloudStack、OpenNebula和OpenStack等云计算解决方案都基于此API管理Xen虚拟机。
+
+
+
+
+
+
+一、配置网络接口
+
+[root@el6 ~]# cat /etc/sysconfig/network-scripts/ifcfg-eth0
+DEVICE="eth0"
+HWADDR="00:11:22:33:44:55"
+NM_CONTROLLED="no"
+ONBOOT="yes"
+BOOTPROTO="dhcp"
+
+最重要的是确保NM_CONTROLLED的值为"no"，以及ONBOOT的值为"yes"。
+
+另外，要确保网络服务能够开机自动启动：
+# chkconfig network on
+
+在/etc/hosts文件中为本机的主机名及IP地址建立解析
+127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+192.168.1.7	virtlab.magedu.com	virtlab
+
+禁用SELinux。
+
+二、解决依赖关系
+
+
+# yum install screen vim wget tcpdump ntp ntpdate man smartmontools links lynx ethtool xorg-x11-xauth
+
+
+修改grub.conf，增加超时时间，并禁用hiddenmenu。
+
+#boot=/dev/sda
+default=0
+timeout=15
+splashimage=(hd0,0)/grub/splash.xpm.gz
+#hiddenmenu
+title Red Hat Enterprise Linux (2.6.32-279.el6.x86_64)
+        root (hd0,0)
+        kernel /vmlinuz-2.6.32-279.el6.x86_64 ro root=/dev/mapper/vg0-root rd_NO_LUKS LANG=en_US.UTF-8 rd_LVM_LV=vg0/swap rd_NO_MD SYSFONT=latarcyrheb-sun16 crashkernel=auto rd_NO_DM  KEYBOARDTYPE=pc KEYTABLE=us rd_LVM_LV=vg0/root rhgb quiet
+        initrd /initramfs-2.6.32-279.el6.x86_64.img
+
+
+三、安装编译Xen所依赖的工具
+
+# yum groupinstall "Development tools" "Additional Development" "Debugging Tools" "System administration tools" "Compatibility libraries" "Console internet tools" "Desktop Platform Development"
+
+
+# yum install transfig wget texi2html libaio-devel dev86 glibc-devel e2fsprogs-devel gitk mkinitrd iasl xz-devel bzip2-devel pciutils-libs pciutils-devel SDL-devel libX11-devel gtk2-devel bridge-utils PyXML qemu-common qemu-img mercurial texinfo libuuid-devel ocaml ocaml-findlib
+
+# yum install glibc-devel.i686
+
+
+四、Rebuilding and installing Xen src.rpm
+
+# cd /usr/local/src
+# wget http://xenbits.xen.org/people/mayoung/EL6.xen/SRPMS/xen-4.1.2-20.el6.src.rpm
+# rpm -ivh xen-4.1.2-20.el6.src.rpm
+# cd /root/rpmbuild/SPECS/
+# rpmbuild -bb xen.specs
+
+五、安装qemu(此步非必须)
+
+# yum install usbredir-devel spice-protocol spice-server-devel libseccomp-devel systemtap-sdt-devel nss-devel xfsprogs-devel bluez-libs-devel brlapi-devel libcap-devel
+# wgethttp://mirrors.ustc.edu.cn/fedora/linux/releases/15/Everything/source/SRPMS/qemu-0.14.0-7.fc15.src.rpm
+# rpm -ivh qemu-1.2.0-23.fc18.src.rpm
+# cd /root/rpmbuild/SPECS
+# rpmbuild -bb qemu.spec
+
+
+六、编译内核
+
+#
+# 
+
+
+# These core options (Processor type and features| Paravirtualized guest support]
+CONFIG_PARAVIRT=y
+CONFIG_XEN=y
+CONFIG_PARAVIRT_GUEST=y
+CONFIG_PARAVIRT_SPINLOCKS=y
+# add this item
+
+# And Xen pv console device support (Device Drivers|Character devices
+CONFIG_HVC_DRIVER=y
+CONFIG_HVC_XEN=y
+
+# And Xen disk and network support (Device Drivers|Block devices and Device Drivers|Network device support)
+CONFIG_XEN_FBDEV_FRONTEND=y
+CONFIG_XEN_BLKDEV_FRONTEND=y
+# change the value to y
+CONFIG_XEN_NETDEV_FRONTEND=y
+# change the value to y
+
+# And the rest (Device Drivers|Xen driver support)
+CONFIG_XEN_PCIDEV_FRONTEND=y
+CONFIG_INPUT_XEN_KBDDEV_FRONTEND=y
+CONFIG_XEN_FBDEV_FRONTEND=y
+CONFIG_XEN_XENBUS_FRONTEND=y
+CONFIG_XEN_SAVE_RESTORE=y
+CONFIG_XEN_GRANT_DEV_ALLOC=m
+
+# And for tmem support:
+CONFIG_XEN_TMEM=y
+# add the item
+CONFIG_CLEANCACHE=y
+# enable the item
+CONFIG_FRONTSWAP=y
+# enable the item
+CONFIG_XEN_SELFBALLOONING=y
+# add the item
+
+# Configure kernel for dom0 support
+# NOTE: Xen dom0 support depends on ACPI support. Make sure you enable ACPI support or you won't see Dom0 options at all.
+# In addition to the config options above you also need to enable:
+CONFIG_X86_IO_APIC=y
+CONFIG_ACPI=y
+CONFIG_ACPI_PROCFS=y (optional)
+CONFIG_XEN_DOM0=y
+CONFIG_PCI_XEN=y
+CONFIG_XEN_DEV_EVTCHN=y
+CONFIG_XENFS=y
+# change the value to y
+CONFIG_XEN_COMPAT_XENFS=y
+CONFIG_XEN_SYS_HYPERVISOR=y
+CONFIG_XEN_GNTDEV=y
+CONFIG_XEN_BACKEND=y
+CONFIG_XEN_NETDEV_BACKEND=m
+# enable the item
+CONFIG_XEN_BLKDEV_BACKEND=m
+# enable the item
+CONFIG_XEN_PCIDEV_BACKEND=m
+CONFIG_XEN_PRIVILEGED_GUEST=y
+CONFIG_XEN_BALLOON=y
+CONFIG_XEN_SCRUB_PAGES=y
+
+# If you're using RHEL5 or CentOS5 as a dom0 (ie. you have old udev version), make sure you enable the following options as well:
+CONFIG_SYSFS_DEPRECATED=y
+CONFIG_SYSFS_DEPRECATED_V2=y
+
+
+七、编辑安装libvirt
+
+yum install libblkid-devel augeas sanlock-devel radvd ebtables systemtap-sdt-devel scrub numad
+
+# cd /usr/src
+# wget ftp://ftp.redhat.com/pub/redhat/linux/enterprise/6Server/en/os/SRPMS/libvirt-0.9.10-21.el6_3.7.src.rpm
+# rpm -ivh libvirt-0.9.10-21.el6_3.7.src.rpm
+编辑/root/rpmbuild/SPECS/libvirt.spec文件，启用with_xen选项。
+
+# cd /root/rpmbuild/SPECS
+
+# rpmbuild -bb libvirt.spec
+
+
+yum install libnl-devel xhtml1-dtds libudev-devel libpciaccess-devel yajl-devel libpcap-devel avahi-devel parted-devel device-mapper-devel numactl-devel netcf-devel xen-devel dnsmasq iscsi-initiator-utils gtk-vnc-python
+
+先安装gtk-vnc-python包。
+
+编译安装virtinst
+
+编译安装libvirtd
+
+编译安装virt-manager
+
+
+
+
+注意：libvirt-1.0之前的版本不支持xen 4.2。
+
+
+
+
+
+grub配置：
+
+#boot=/dev/sda
+default=0
+timeout=5
+splashimage=(hd0,0)/grub/splash.xpm.gz
+hiddenmenu
+title Red Hat Enterprise Linux Server (3.7.4-1.el6xen.x86_64)
+        root (hd0,0)
+        kernel /xen.gz dom0_mem=1024M cpufreq=xen dom0_max_vcpus=2 dom0_vcpus_pin
+        module /vmlinuz-3.7.4-1.el6xen.x86_64 ro root=/dev/mapper/vg0-root rd_NO_LUKS LANG=en_US.UTF-8 rd_LVM_LV=vg0/swap rd_NO_MD SYSFONT=latarcyrheb-sun16 crashkernel=auto rd_NO_DM  KEYBOARDTYPE=pc KEYTABLE=us rd_LVM_LV=vg0/root rhgb quiet
+        module /initramfs-3.7.4-1.el6xen.x86_64.img
+title Red Hat Enterprise Linux (2.6.32-279.el6.x86_64)
+        root (hd0,0)
+        kernel /vmlinuz-2.6.32-279.el6.x86_64 ro root=/dev/mapper/vg0-root rd_NO_LUKS LANG=en_US.UTF-8 rd_LVM_LV=vg0/swap rd_NO_MD SYSFONT=latarcyrheb-sun16 crashkernel=auto rd_NO_DM  KEYBOARDTYPE=pc KEYTABLE=us rd_LVM_LV=vg0/root rhgb quiet
+        initrd /initramfs-2.6.32-279.el6.x86_64.img
+
+
+Dom1: 
+
+
+  xm create /dev/null ramdisk=initrd.img \
+                    kernel=/boot/vmlinuz-2.6.12.6-xenU \
+                    name=ramdisk vif='' vcpus=1 \
+                    memory=64 root=
+
+
+
+
+
+
+# To create one using the VNC backend and sensible defaults:
+#
+# vfb = [ 'type=vnc' ]
+#
+# The backend listens on 127.0.0.1 port 5900+N by default, where N is
+# the domain ID.  You can override both address and N:
+#
+# vfb = [ 'type=vnc,vnclisten=127.0.0.1,vncdisplay=1' ]
+#
+# Or you can bind the first unused port above 5900:
+#
+# vfb = [ 'type=vnc,vnclisten=0.0.0.0,vncunused=1' ]
+#
+# You can override the password:
+#
+# vfb = [ 'type=vnc,vncpasswd=MYPASSWD' ]
+#
+# Empty password disables authentication.  Defaults to the vncpasswd
+# configured in xend-config.sxp.
+
+vfb = [ 'type=vnc,vncdisplay=10,vncpasswd=s3cr3t' ]
+
+
+
+DomU:
+	1、根文件系统；
+	2、kernel及ramdisk；
+		Dom0：外部
+		DomU: 内部 
+
+xm
+	create
+	destroy
+	shutdown
+	console
+	list
+	network-attach
+	network-detach
+	block-attach
+	block-detach
+
+	delete：删除虚拟机
+
+	pause: 暂停
+	unpause: 从暂停中恢复
+
+	suspend: 挂起
+	resume: 从挂起中恢复；
+
+
+	save: 保存状态至文件中
+	restore: 从保存状态中恢复
+
+	top: 资源使用状态监控
+
+	info: 查看主机相关信息，如内存等；
+
+
+
+
+	virt-manager GUI
+
+	虚拟机的配置文件：/etc/xen
+
+
+
+
+批量部署DomU:
+	准备一个映像模板；
+		OZ：
+	脚本：
+		生成一个配置文件/etc/xen
+		下载一个磁盘映像
+
+16：
+
+
+disk = ['phy:/dev/sdb,xvda,w']
+
+
+使用了bootloader, pygrup示例：
+#ramdisk="/boot/initramfs-2.6.32-358.el6.x86_64.img"
+#kernel="/boot/vmlinuz-2.6.32-358.el6.x86_64"
+name="linux"
+vcpus=1
+memory=128
+disk=['file:/xen/vm2/dom2.img,xvda,w',]
+bootloader="/usr/bin/pygrub"
+#root="/dev/xvda2 ro"
+#extra="selinux=0 init=/sbin/init"
+vif=[ 'bridge=br0' ]
+on_crash="destroy"
+on_reboot="restart"
+
+
+使用Dom0中的kernel和ramdisk引导的示例：
+ramdisk="/boot/initramfs-2.6.32-358.el6.x86_64.img"
+kernel="/boot/vmlinuz-2.6.32-358.el6.x86_64"
+name="test"
+vcpus=1
+memory=128
+disk=['file:/xen/vm1/test.img,xvda,w',]
+root="/dev/xvda ro"
+extra="selinux=0 init=/sbin/init"
+
+
+
+自定义安装，并启用了vnc功能：
+#ramdisk="/xen/isolinux/initrd.img"
+#kernel="/xen/isolinux/vmlinuz"
+name="rhel6"
+vcpus=2
+memory=512
+disk=['file:/xen/vm3/rhel6.img,xvda,w',]
+bootloader="/usr/bin/pygrub"
+#root="/dev/xvda2 ro"
+#extra="selinux=0 init=/sbin/init"
+#extra="ks=http://172.16.0.1/rhel6.x86_64.cfg"
+vif=[ 'bridge=br0' ]
+on_crash="destroy"
+on_reboot="destroy"
+vfb=[ 'vnc=1,vnclisten=0.0.0.0' ]
+
+
+
+
+
+
+
+
+
+
+
+
+4.2 案例1：基于Dom0(rhel6.4 x86_64)制作一个运行于DomU的微型Linux系统
+
+xm create命令能够基于预配置的根文件系统、能运行于Xen DomU的内核、ramfs和Xen配置文件启动DomU，当然，在其启动之前，所有需要用到的其它组件都需要准备就绪方才可以。这一切准备就绪后，使用xm create命令有点类似于按下主机的电源按钮对其进行启动。下面开始制作过程。
+
+4.2.1 制作根文件系统
+
+创建空的虚拟磁盘映像，以之作为新建非特权域的虚拟磁盘映像文件，此映像文件并不真正占用为其指定的空间，而是随着存储的内容而变化。文件的路径和其虚拟空间大小(这里为2048)也可根据需要进行指定。
+# dd if=/dev/zero of=/xen/test/rhel6.img oflag=direct bs=1M seek=2048 count=1
+
+接下来将此虚拟磁盘映像格式化为ext4文件系统。
+# mkfs.ext4  /xen/test/rhel6.img
+
+这里也可以使用其它文件系统，但要确保用于DomU的内核支持此文件系统。此外，如果指定的文件系统是以内核模块的形式存在，那么还需要将对应的内核模块复制到后面制作的根文件系统上相应的路径下。对于这里实验中的Dom0来说，其内核将ext4文件系统直接编译进了内核，我们也将此内核用于后面要启动的DomU。
+
+将格式化完毕的虚拟磁盘映像文件挂载至某目录下，如/mnt，并创建根文件系统目录结构。
+# mount  -o loop  /xen/test/rhel6.img  /mnt
+# mkdir  -pv /mnt/{etc/{init,rc.d},bin,sbin,lib64,dev,tmp,proc,sys}
+
+Linux系统的启动过程中，内核初始化完成后，会运行/sbin/init以启动PID号为1的init进程，并在其配置文件的辅助下启动完成挂载额外文件系统、启动服务、启动终端等后续任务。我们这里将/sbin/init的任务精简为仅启动bash进程并打印命令提示符于终端。
+
+# cp  /sbin/init  /mnt/sbin
+# cp  /bin/bash  /mnt/bin
+
+这两个二进制程序的运行依赖于一些系统库文件，ldd命令可以查看每个二进制程序所依赖的库文件，将每个二进制程序所依赖的库文件复制到虚拟磁盘映像文件挂载点(/mnt)中对应的路径下即可。这里以/sbin/init为例进行说明。
+# ldd /sbin/init
+	linux-vdso.so.1 =>  (0x00007fffddbee000)
+	libnih.so.1 => /lib64/libnih.so.1 (0x00007f77027bc000)
+	libnih-dbus.so.1 => /lib64/libnih-dbus.so.1 (0x00007f77025b2000)
+	libdbus-1.so.3 => /lib64/libdbus-1.so.3 (0x00007f7702370000)
+	libpthread.so.0 => /lib64/libpthread.so.0 (0x00007f7702153000)
+	librt.so.1 => /lib64/librt.so.1 (0x00007f7701f4b000)
+	libgcc_s.so.1 => /lib64/libgcc_s.so.1 (0x00007f7701d34000)
+	libc.so.6 => /lib64/libc.so.6 (0x00007f77019a2000)
+	/lib64/ld-linux-x86-64.so.2 (0x0000003623800000)
+上面列表中的第一个库文件可以忽略。于是，我们复制/lib64/libnih.so.1到/mnt/lib64目录中即可，后面的各库文件都照此法进行。
+
+而后查看/bin/bash所依赖的库文件，并逐个复制。在/sbin/init中已经复制过的库文件就可以略过了。如果还想让目标系统能够执行其它命令，照此法进行即可。
+
+/sbin/init的运行还需要一些配置文件，它们是位于/etc/init目录以.conf结尾的文件。我们这里为其建立一个简单的配置文件rcS.conf。因此，这里需要创建/mnt/etc/init/rcS.conf文件，内容如下。
+# rcS - runlevel compatibility
+#
+# This task runs the old sysv-rc startup scripts.
+
+start on startup
+
+stop on runlevel
+
+task
+console output
+exec /etc/rc.d/rc.sysinit
+# end of rcS.conf
+
+上面的配置文件依赖于/etc/rc.d/rc.sysinit脚本来完成系统的初始化，因此，这里编辑/mnt/etc/rc.d/rc.sysinit，为其添加如下内容。
+#!/bin/bash
+echo -e "\tWelcome to Xen DomU test"
+/bin/bash
+
+而后执行如下命令让其具有执行权限：
+# chmod +x  /mnt/etc/rc.d/rc.sysinit
+
+完成后卸载此磁盘映像文件。
+# umount  /mnt
+
+4.2.2 为目标DomU制作配置文件
+
+Xen PV DomU运行依赖的前提前文已经进行了详细解释。根据需要，我们这里已经制作完成一个根文件系统，接着还需要能运行于DomU的内核，相应的ramfs和Xen配置文件。事实上，这里的Dom0中使用的内核/boot/ vmlinuz-3.7.4-1.el6xen.x86_64就可以运行于DomU，其相应的ramfs文件/boot/ initramfs-3.7.4-1.el6xen.x86_64.img也可以直接使用，因此，此两者文件我们就不再另外制作。
+
+接下来只需再为目标DomU提供一个配置文件，其就能启动了。于是我们去新配置文件/etc/xen/test，其内容如下。
+
+kernel = "/boot/vmlinuz-3.7.4-1.el6xen.x86_64"
+ramdisk = "/boot/initramfs-3.7.4-1.el6xen.x86_64.img"
+name = "test"
+memory = "128"
+disk = [ 'file:/xen/test/rhel6.img,xvda,w', ]
+vcpus=1
+on_reboot = 'restart'
+on_crash = 'destroy'
+root = "/dev/xvda ro"
+extra = "selinux=0 init=/sbin/init"
+
+Xen配置文件一般由选项（options）、变量(variables)、CPU、网络、PCI、HVM、计时器(timers)、驱动(drivers)、磁盘设备(disk devices)、动作(behavior)，以及图形及声音(Graphics and audio)几个段组成，分别用于定义不同类别的域属性或设备属性。
+
+上面的配置文件中的各选项作用如下。
+◇	kernel：为当前域指定可用于DomU的内核文件；
+◇	ramdisk：与kernel指定的内核文件匹配使用的ramdisk映像文件，根据需要指定，此为可选项；
+◇	name：当前域的独有名称；每个域必须使用全局惟一的名称，否则将产生错误；
+◇	memory：当前域的可用物理内存空间大小，单位为MB，默认为128；
+◇	disk：当前域的所有可用磁盘设备列表，格式为disk = [ “disk1”, “disk2”, …]，每个disk都有三个参数进行定义，格式为“backend-dev，front-dev，mode”；
+	backend-dev主要有两种类型，物理设备或虚拟磁盘映像文件，它们的格式分别为“phy:device”和“file:/path/to/file”；
+	frontend-dev定义其在DomU中的设备类型；
+	mode则用于定义其访问权限，r为只读，w为读写；
+◇	vcpus：配置给当前域使用的虚拟CPU的个数；默认为1；
+◇	root：为当前域指定其根文件系统所在的设备，这个将作为内核参数在内核启动传递给内核；
+◇	extra：传递给内核的额外参数，其中selinux=0表示禁用selinux，init则用于指定init程序的路径；多个参数之间使用空格隔开；
+◇	on_reboot：执行xm reboot命令或在当前域内部执行重启操作时由Xen执行的动作；其常用的值为destroy和restart；
+◇	on_crash：当前域由于各种原因崩溃时由Xen执行的动作；其常用的值为destroy、restart和preserve，preserve可以保存系统崩溃前的状态信息以用于调试；
+◇	on_reboot：执行xm shutdown命令或在当前域内部执行关机操作时由Xen执行的动作；
+
+
+/dev/sdb
+
+disk = [ 'phy:/dev/sdb,xvda,w', ]
+
+
+
+其它常用参数：
+◇	vif：定义当前域的可用虚拟网络接口列表，每个虚拟网络接口都可以使用“name=value”的格式定义其属性；也可在定义某接口时不指定任何属性，其所有属性将均由系统默认配置；例如：vif = ['ip = "192.168.1.19", bridge=xenbr0']
+	type：接口设备的类型，默认为netfront；
+	mac：MAC地址，默认为随机；
+	bridge：桥接到的物理设备，默认为Dom0中的第一个桥接设备；
+	ip：ip地址；
+	script：配置此接口的脚本文件，省略时将使用默认的配置脚本；
+	vifname：后端设备的设备名称，默认为vifD.N，其中D为当前域的ID，N为此网络接口的ID；
+◇	vfb：为当前域定义虚拟帧缓冲，其有许多可用属性，可以使用“name=value”的格式进行定义；
+	vnc或sdl：定义vnc的类型，vnc=1表示启动一个可由外部设备连接的vnc服务器，sdl=1则表示启用一个自有的vncviewer；两者可以同时使用；
+	vncdisplay：vnc显示号，默认为当前域的ID，当前域的VNC服务器将监听5900+此显示号的端口；
+	vnclisten：VNC服务器监听的地址，默认为127.0.0.1；
+	vncunused：如果此属性的值为非零值，则表示vncserver监听大于5900的第一个没被占用的端口；
+	vncpasswd：指定VNC服务器的认证密码；
+	display：用于域的自有vncviewer显示，默认为DISPLAY环境变量的值；
+◇	cpu：指定当前域应该在哪个物理CPU上启动，0表示第一颗CPU，1表示第二颗，依次类推；默认为-1，表示Xen可自行决定启动当前域的CPU；
+◇	cpus：指定当前域的VCPU可以在哪些物理CPU上运行，如cpus = ”3,5-8,^6”表示当前域的VCPU可以在3，5，7，8号CPU上运行；
+◇	bootloader：bootloader程序的路径；基于此bootloader，PV DomU的内核也可直接位于其文件系统上而非Dom0的文件系统；
+
+更多的选项请参见xmdomain.cfg的手册页，或参考Xen官方wiki链接http://wiki.xen.org/wiki/XenConfigurationFileOptions中的详细解释。
+
+4.2.3 启动名为test的DomU  
+
+启动DomU，可使用xm create命令或xl create命令，但要使用xm命令，需要事先启动Xend服务；然而，要使用xl命令，则不能启动Xend服务。我们这里仍然以xm为例。
+# xm create  -c  test
+
+其中的-c选项表示启动后直接连接至虚拟机的终端，整个启动过程就在当前屏幕上显示。如下面所示的启动过程的最后几行
+dracut: Switching root
+	Welcome to Xen DomU test
+bash: no job control in this shell
+bash-4.1#
+
+在Dom0的终端上执行xm list命令即可查看test的运行状态。
+# xm list
+Name                                     ID   Mem VCPUs      State   Time(s)
+Domain-0                                   0   512     1     r-----    197.7
+test                            
+
+
+4.3案例2：基于isolinux的内核和initrd文件在PV DomU模式安装rhel 6.3
+
+第一步，创建空的虚拟磁盘映像，以之作为新建非特权域的虚拟磁盘文件，此映像文件并不真正占用为其指定的空间，而是随着存储的内容而变化。
+# dd if=/dev/zero of=/xen/vm1/rhel6.img oflag=direct bs=1M seek=40960 count=1
+
+第二步，获取要安装的rhel6(x86_64)的isolinux目录中的vmlinuz和initrd.img文件，这里将其存放于/xen/rhel6/isolinux目录中。
+
+第三步，为新的非特权域创建配置文件/etc/xen/rhel6，内容如下。
+
+kernel = "/xen/rhel6/isolinux/vmlinuz"
+ramdisk = "/xen/rhel6/isolinux/initrd.img"
+name = "rhel6"
+memory = "512"
+disk = [ 'file:/xen/vm1/rhel6.img,xvda,w', ]
+vif = [ 'bridge=xenbr0', ]
+ 
+#bootloader="/usr/bin/pygrub"
+#extra = "text ks=http://some_server/path/to/kickstart.cfg"
+vcpus=1
+on_reboot = 'destroy'
+on_crash = 'destroy'
+
+第四步，创建新的非特权域。
+# xm create -c rhel6
+此命令会启动rhel6的安装界面，其运行于Xen的PV模式。根据提示一步步的安装系统即可。
+
+安装完成后，将上述配置文件中的前两行信息注释，并启用bootloader一行，再使用如前面的xm create命令即可正常启动此域。其修改后的配置文件内容如下：
+name = "rhel6"
+memory = "512"
+disk = [ 'file:/xen/vm1/rhel6.img,xvda,w', ]
+vif = [ 'bridge=xenbr0', ]
+ 
+bootloader="/usr/bin/pygrub"
+vcpus=1
+on_reboot = 'restart'
+on_crash = 'destroy
+
+
+
+
+
+
+
+在启动DomU时，可以为其定义可用的虚拟网络接口个数、每个虚拟网络接口的属性等，这仅需要在其对应的配置文件中使用vif选项即可。vif选项的值是一个列表，列表中的每个条目使用单引号引用，用于定义对应虚拟网络接口属性，条目之间使用逗号分隔。比如下面的示例就为当前域定义了三个虚拟网络接口，每个接口的属性均采用了默认配置。
+vif = [ ‘ ‘, ‘ ‘, ‘ ‘ ]
+
+每个网络接口可定义的属性语法格式为‘type= TYPE, mac=MAC, bridge=BRIDGE, ip=IPADDR, script= SCRIPT," + \ "backend=DOM, vifname=NAME, rate=RATE, model=MODEL, accel=ACCEL’。
+◇	type：网络接口的类型，即其前端设备类型，默认为netfront；其可用的值还有有ioemu，表示使用QEMU的网络驱动；
+◇	mac：指定此接口的MAC地址，默认为00:16:3E:(IEEE分配给XenSource的地址段)开头的随机地址；
+◇	bridge：指定此接口使用的桥接设备，默认为Dom0内的第一个桥接设备；
+◇	ip：为当前域定义固定IP地址，如果网络中存在DHCP服务器，请确保此地址一定没有包含于DHCP的可分配地址范围中；事实上，在DHCP环境中，可以直接在DHCP服务器上为此接口分配固定IP地址，因此，没有必要再使用此参数手动指定；
+◇	script：指定用于配置当前接口网络属性的脚本，默认为xend的配置文件中使用vif-script指定的脚本；
+◇	vifname：定义当前网络接口的后端设备在Dom0显示的名字；默认为vifDomID.DevID，其在当前域启动时自动生成，并随当前域ID的变化而改变；为其使用易于识别的固定名称有助于后期的管理工作；
+◇	rate：为当前接口指定可用带宽，例如rate=10MB/s；
+◇	model：由QEMU仿真的网络设备的类型，因此，只有在type的值为ioemu此参数才能意义；其可能的取值有lance、ne2k_isa、ne2k_pci、rt1839和smc91c111。默认为ne2k_pci；
+
+无论DomU中安装的是什么操作系统，为其定义网络接口时指定固定的MAC地址和接口名称通常是很有必要，因为其有助于追踪特定域的报文及当域多次启动后仍能使用相同的网络接口名称从而保证日志信息的连贯性。此外，如果Dom0中定义了多个桥接设备，还应该为桥接的网络接口使用bridge参数指定固定桥接到的桥接设备。下面的示例展示了指定此三个参数的接口定义。
+vif = [ ‘vifname=web0.0, mac=00:16:3E:00:00:01, bridge=xenbr0’ ]
+
+
+
+
+
+
+
+xen实时迁移
+
+基于iscsi来实现。
+
+
+kernel = "/boot/vmlinuz-3.7.4-1.el6xen.x86_64"
+ramdisk = "/boot/initramfs-3.7.4-1.el6xen.x86_64.img"
+name = "test"
+memory = "128"
+disk = [ 'phy:/dev/sdb,xvda,w', ]
+vcpus=2
+on_reboot = 'restart'
+on_crash = 'destroy'
+root = "/dev/xvda2 ro"
+extra = "selinux=0 init=/sbin/init"
+
+
+提供配置文件：
+	/etc/{passwd,shadow,group,fstab,nsswitch.conf}
+提供库文件：
+	/lib64/libnss_file.so.*
+提供配置文件:/etc/nginx
+提供目录：/var/run, /var/log/nginx
+
+网卡驱动：xen-netfront.ko
+
+
+
+
+
+
+
+
+
+KVM: (64bits)
+	rhel5.9
+	rhel6.4
+
+CPU: HVM
+	grep -o -E 'svm|vmx' /proc/cpuinfo
+
+
+modprobe
+	kvm_intel, kvm_amd
+	kvm
+
+modprobe kvm
+
+
+
+安装：
+
+KVM: Full
+Xen: PV, Full(HVM+qemu), PV on HVM
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+2.5.3.2 使用virt-install创建虚拟机并安装GuestOS
+
+virt-install是一个命令行工具，它能够为KVM、Xen或其它支持libvrit API的hypervisor创建虚拟机并完成GuestOS安装；此外，它能够基于串行控制台、VNC或SDL支持文本或图形安装界面。安装过程可以使用本地的安装介质如CDROM，也可以通过网络方式如NFS、HTTP或FTP服务实现。对于通过网络安装的方式，virt-install可以自动加载必要的文件以启动安装过程而无须额外提供引导工具。当然，virt-install也支持PXE方式的安装过程，也能够直接使用现有的磁盘映像直接启动安装过程。
+
+virt-install命令有许多选项，这些选项大体可分为下面几大类，同时对每类中的常用选项也做出简单说明。
+◇	一般选项：指定虚拟机的名称、内存大小、VCPU个数及特性等；
+	-n NAME, --name=NAME：虚拟机名称，需全局惟一；
+	-r MEMORY, --ram=MEMORY：虚拟机内在大小，单位为MB；
+	--vcpus=VCPUS[,maxvcpus=MAX][,sockets=#][,cores=#][,threads=#]：VCPU个数及相关配置；
+	--cpu=CPU：CPU模式及特性，如coreduo等；可以使用qemu-kvm -cpu ?来获取支持的CPU模式；
+◇	安装方法：指定安装方法、GuestOS类型等；
+	-c CDROM, --cdrom=CDROM：光盘安装介质；
+	-l LOCATION, --location=LOCATION：安装源URL，支持FTP、HTTP及NFS等，如ftp://172.16.0.1/pub；
+	--pxe：基于PXE完成安装；
+	--livecd: 把光盘当作LiveCD；
+	--os-type=DISTRO_TYPE：操作系统类型，如linux、unix或windows等；
+	--os-variant=DISTRO_VARIANT：某类型操作系统的变体，如rhel5、fedora8等；
+	-x EXTRA, --extra-args=EXTRA：根据--location指定的方式安装GuestOS时，用于传递给内核的额外选项，例如指定kickstart文件的位置，--extra-args "ks=http://172.16.0.1/class.cfg"
+	--boot=BOOTOPTS：指定安装过程完成后的配置选项，如指定引导设备次序、使用指定的而非安装的kernel/initrd来引导系统启动等 ；例如：
+	--boot  cdrom,hd,network：指定引导次序；
+	--boot kernel=KERNEL,initrd=INITRD,kernel_args=”console=/dev/ttyS0”：指定启动系统的内核及initrd文件；
+◇	存储配置：指定存储类型、位置及属性等；
+	--disk=DISKOPTS：指定存储设备及其属性；格式为--disk /some/storage/path,opt1=val1，opt2=val2等；常用的选项有：
+	device：设备类型，如cdrom、disk或floppy等，默认为disk；
+	bus：磁盘总结类型，其值可以为ide、scsi、usb、virtio或xen；
+	perms：访问权限，如rw、ro或sh（共享的可读写），默认为rw；
+	size：新建磁盘映像的大小，单位为GB；
+	cache：缓存模型，其值有none、writethrouth（缓存读）及writeback（缓存读写）；
+	format：磁盘映像格式，如raw、qcow2、vmdk等；
+	sparse：磁盘映像使用稀疏格式，即不立即分配指定大小的空间；
+	--nodisks：不使用本地磁盘，在LiveCD模式中常用；
+◇	网络配置：指定网络接口的网络类型及接口属性如MAC地址、驱动模式等；
+	-w NETWORK, --network=NETWORK,opt1=val1,opt2=val2：将虚拟机连入宿主机的网络中，其中NETWORK可以为：
+	bridge=BRIDGE：连接至名为“BRIDEG”的桥设备；
+	network=NAME：连接至名为“NAME”的网络；
+其它常用的选项还有：
+	model：GuestOS中看到的网络设备型号，如e1000、rtl8139或virtio等；
+	mac：固定的MAC地址；省略此选项时将使用随机地址，但无论何种方式，对于KVM来说，其前三段必须为52:54:00；
+	--nonetworks：虚拟机不使用网络功能；
+◇	图形配置：定义虚拟机显示功能相关的配置，如VNC相关配置；
+	--graphics TYPE,opt1=val1,opt2=val2：指定图形显示相关的配置，此选项不会配置任何显示硬件（如显卡），而是仅指定虚拟机启动后对其进行访问的接口；
+	TYPE：指定显示类型，可以为vnc、sdl、spice或none等，默认为vnc；
+	port：TYPE为vnc或spice时其监听的端口；
+	listen：TYPE为vnc或spice时所监听的IP地址，默认为127.0.0.1，可以通过修改/etc/libvirt/qemu.conf定义新的默认值；
+	password：TYPE为vnc或spice时，为远程访问监听的服务进指定认证密码；
+	--noautoconsole：禁止自动连接至虚拟机的控制台；
+◇	设备选项：指定文本控制台、声音设备、串行接口、并行接口、显示接口等；
+	--serial=CHAROPTS：附加一个串行设备至当前虚拟机，根据设备类型的不同，可以使用不同的选项，格式为“--serial type,opt1=val1,opt2=val2,...”，例如：
+	--serial pty：创建伪终端；
+	--serial dev,path=HOSTPATH：附加主机设备至此虚拟机；
+	--video=VIDEO：指定显卡设备模型，可用取值为cirrus、vga、qxl或vmvga；
+
+◇	虚拟化平台：虚拟化模型（hvm或paravirt）、模拟的CPU平台类型、模拟的主机类型、hypervisor类型（如kvm、xen或qemu等）以及当前虚拟机的UUID等；
+	-v, --hvm：当物理机同时支持完全虚拟化和半虚拟化时，指定使用完全虚拟化；
+	-p, --paravirt：指定使用半虚拟化；
+	--virt-type：使用的hypervisor，如kvm、qemu、xen等；所有可用值可以使用’virsh capabilities’命令获取；
+◇	其它：
+	--autostart：指定虚拟机是否在物理启动后自动启动；
+	--print-xml：如果虚拟机不需要安装过程(--import、--boot)，则显示生成的XML而不是创建此虚拟机；默认情况下，此选项仍会创建磁盘映像；
+	--force：禁止命令进入交互式模式，如果有需要回答yes或no选项，则自动回答为yes；
+	--dry-run：执行创建虚拟机的整个过程，但不真正创建虚拟机、改变主机上的设备配置信息及将其创建的需求通知给libvirt；
+	-d, --debug：显示debug信息；
+
+尽管virt-install命令有着类似上述的众多选项，但实际使用中，其必须提供的选项仅包括--name、--ram、--disk（也可是--nodisks）及安装过程相关的选项。此外，有时还需要使用括--connect=CONNCT选项来指定连接至一个非默认的hypervisor。
+
+下面这个示例创建一个名为rhel5的虚拟机，其hypervisor为KVM，内存大小为512MB，磁盘为8G的映像文件/var/lib/libvirt/images/rhel5.8.img，通过boot.iso光盘镜像来引导启动安装过程。
+
+# virt-install \
+   --connect qemu:///system \
+   --virt-type kvm \
+   --name rhel5 \
+   --ram 512 \
+   --disk path=/var/lib/libvirt/images/rhel5.img,size=8 \
+   --graphics vnc \
+   --cdrom /tmp/boot.iso \
+   --os-variant rhel5
+
+下面的示例将创建一个名为rhel6的虚拟机，其有两个虚拟CPU，安装方法为FTP，并指定了ks文件的位置，磁盘映像文件为稀疏格式，连接至物理主机上的名为brnet0的桥接网络：
+
+# virt-install \
+    --connect qemu:///system \
+    --virt-type kvm \
+    --name rhel6 \
+    --ram 1024 \
+    --vcpus 2 \
+    --network bridge=brnet0 \
+    --disk path=/VMs/images/rhel6.img,size=120,sparse \
+    --location ftp://172.16.0.1/rhel6/dvd \
+    --extra_args “ks=http://172.16.0.1/rhel6.cfg” \
+    --os-variant rhel6 \
+    --force 
+
+下面的示例将创建一个名为rhel5.8的虚拟机，磁盘映像文件为稀疏模式的格式为qcow2且总线类型为virtio，安装过程不启动图形界面（--nographics），但会启动一个串行终端将安装过程以字符形式显示在当前文本模式下，虚拟机显卡类型为cirrus：
+
+# virt-install \
+--connect qemu:///system \
+--virt-type kvm \ 
+--name rhel5.8 \ 
+--vcpus 2,maxvcpus=4 \
+--ram 512 \ 
+--disk path=/VMs/images/rhel5.8.img,size=120,format=qcow2,bus=virtio,sparse \ 
+--network bridge=brnet0,model=virtio
+--nographics \
+--location ftp://172.16.0.1/pub \ 
+--extra-args "ks=http://172.16.0.1/class.cfg  console=ttyS0  serial" \
+--os-variant rhel5 \
+--force  \
+--video=cirrus
+
+下面的示例则利用已经存在的磁盘映像文件（已经有安装好的系统）创建一个名为rhel5.8的虚拟机：
+
+# virt-install \
+    --name rhel5.8
+    --ram 512
+    --disk /VMs/rhel5.8.img
+    --import
+
+每个虚拟机创建后，其配置信息保存在/etc/libvirt/qemu目录中，文件名与虚拟机相同，格式为XML。
+
+
+
+virsh uri: 查看当前主机上hypervisor的连接路径；
+virsh connect:
+virsh define: 创建一个虚拟机，根据事先定义的xml格式的配置文件；创建以后不会自动启动；
+virsh create: 创建，创建完成后会自动启动；
+virsh undefine: 删除
+
+
+
+
+--boot kernel=KERNEL,initrd=INITRD,kernel_args="console=/dev/ttyS0"
+
+
+
+virt-install --connect qemu:///system --ram 128 --name rhel6 --os-type=linux --os-variant=rhel5 --disk path=/kvm/vm1/rhel6.img,device=disk,format=raw --vcpus=2 --vnc --noautoconsole --import
+
+virt-install \
+              --name mykernel
+              --ram 512
+              --disk /home/user/VMs/mydisk.img
+              --boot kernel=/tmp/mykernel,initrd=/tmp/myinitrd,kernel_args="console=ttyS0"
+              --serial pty
+
+
+
+
+
+Essex
+Folsom
+Grizzly
+
+
+KVM：
+	virt-install: 导入现存映像文件
+		--import
+
+
+Xen:
+	HA: 50, 100Xen
+
+虚拟化：
+	CPU、内存、IO(Disk, Network)
+
+
+	IDC: 50, 100xen, 
+		运行在哪个节点上, 提供合适的存储, 映像文件
+
+
+CPU和内存：Compute
+Disk: Storage
+Network: Network
+
+IaaS云解决方案
+
+云计算：
+	IaaS: Infrastucture, 基础架构即服务
+		KVM, Xen, hyper-v, openvz
+	PaaS：Platform, 平台即服务
+		开发库，开发接口，开发工具
+		能自行开发、调试及安装应用程序
+	SaaS：Software, 软件即服务
+		MySQL: create database
+
+云服务范围：
+	私有云
+	公共云
+
+OpenStack: 虚拟化管理工具
+	XAPI(XCP)
+CloudStack
+
+
+NASA:
+	OpenStack
+		python
+
+
+
+
+Openshift
+
+
+
+
+RabbitMQ, ZeroMQ, Qpid
+
+rest: 
+
+KeyStone的认证方式主要有两类：
+	token:  iu8y48hjfkyt843jkreo
+	user/password:  
+		role: 角色
+			admin, Member
+	功能：
+		编录服务
+		策略服务
+
+
+MMM: Multi Master MySQL
+
+
+
+
+控制节点：
+	keystone, glance
+		glance: filesystem, /var/lib/glance/images
+			image
+	Nova:
+		nova-compute
+		nova-network
+		nova-volume
+		nova-scheduler
+
+
+swift: Openstack
+	Rackspace, s3
+	分布式存储
+
+	HDFS: 多副本
+		3
+		商用计算机：Xeon
+
+		swift: 3个以上；
+		proxy-node: 
+
+
+Openstack: 云栈
+	Keystone: 编录，认证（token, identity）
+	Nova: (compute, scheduler, network, volume, console, consoleauth)
+	Glance: (Image as a service)
+	Swift: (Object Store), 分布式文件系统
+	Horizon: dashboard
+	Cinder: (nova-volume)
+	Quantum: (nova-network) Open Vswitch
+
+
+消息队列：异步协作
+	请求服务：生产者
+	提供服务：消费者
+
+	AMQP: RabbitMQ, ZeroMQ, Qpid
+		高级消息队列协议：Advanced Message Queue Protocol
+
+CloudStack: Apache
+OpenNebular:
+Eucaptulus:
+
+	IaaS, PaaS, SaaS
+
+OpenStack: hypervisor
+
+
+200GB: 
+	2012-11-11：
+		100W,
+
+文本文件：
+
+RDBMS：表
+	字段、数据类型、约束
+	结构化数据 (structured data)
+
+	Google: 
+		20亿：
+			ab: 100
+
+	非结构化数据(unstructured data)
+		pagerank: 
+
+	半结构化数据(semi-structured data)
+		xml
+		json
+
+	facebook: 
+
+
+facebook: PV, 500亿：
+	
+	化整为零：
+		500G：500*1G
+			并行处理：
+				将一个大问题切割成多个小问题
+					OLAP: 数据挖掘
+
+		机器学习：deep learning
+
+500*1G
+	100M*500=50G
+		50*1G=100M
+			5G
+
+	并行处理：
+		处理：
+			keyword: 次数
+			A：10
+			C: 67
+			key-value pair
+		存储：
+
+
+实时：即时结果
+批处理：在后台运行一段无法预估的时长
+
+
+
+MapReduce: Simplified Data Processing on Large Clusters
+
+2003： The Google File System
+
+
+分布式文件系统
+
+
+Lucene
+
+Nutch
+
+
+Hadoop: 
+	DFS --> HDFS
+	MapReduce
+		1、编程模型
+		2、运行框架
+		3、MapReduce编程思想的具体实现
+
+	HDFS+MapReduce = Hadoop
+
+
+HDFS:
+	namenode: NN节点
+	DataNode: DN节点
+
+MapReduce
+	JobTracker: JT节点
+	TaskTracker: TT节点
+
+
+page1: 1
+page2: 1
+page1: 1
+page2: 1
+page3: 1
+page3: 1
+
+
+page1: 2
+page2: 2
+page3: 2
+
+
+HDFS:
+	1、HDFS设计用来存储大文件；对海量小文件的存储不太适用；
+	2、用户空间的文件系统；
+	3、HDFS不支持修改；新版本支持追加；
+	4、不支持挂载，并通过系统调用进行访问；只能使用专用访问接口，如专用命令行工具、API；
+
+MapReduce:
+
+Hive: SQL, 存储；
+HBase: 修改, 存储
+
+
+RDBMS --> Sqoop --> HBase --> HDFS
+
+
+
+1、安装配置HDFS
+2、安装配置MapReduce
+3、HBase
+4、Hive
+5、sqoop
+6、flume/scribe/chukwa
+
+HDFS: 
+	本地模式
+	伪分布式(使用一个节点)
+	完全分布式(4以上的节点)
+
+SaaS: 
+
+存储云： 
+
+
+

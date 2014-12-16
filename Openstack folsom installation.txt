@@ -1,0 +1,1466 @@
+
+rpm -Uvh http://download.fedoraproject.org/pub/epel/6/i386/epelrelease-6-8.noarch.rpm
+
+前提：本文档中涉及到的所有主机的OS均为RHEL 6.4 x86_64系统。
+
+Control Node: 172.16.200.6     node1.magedu.com  
+Compute Node: 172.16.200.7 	   node2.magedu.com
+Object Storage Node: 172.16.200.8    node3.magedu.com
+
+Swift是一个分布式存储系统，其架构比较复杂，这里采用其最简单的模型来演示其使用，即基于一个物理节点来实现其所有功能。
+
+
+
+一、安装配置Keystone
+
+OpenStack的Identify服务(即Keystone)有两个主要功能
+	用户管理：实现用户认证及授权；
+	服务目录(Service catalog)：所有可用服务的信息库，包含所有可用服务及其API endpoint路径；
+
+1、安装Keystone
+
+1.1、安装并初始化MySQL服务器
+
+# yum -y install mysql mysql-server
+# service mysqld start
+# mysqladmin -uroot -p password '[YOUR_ROOT_PASSWORD]'
+# chkconfig mysqld on
+
+1.2、安装配置Identity服务
+
+# yum install openstack-utils openstack-keystone python-keystoneclient
+
+创建keystone数据库，其默认会创建一个keystone用户以访问此同名数据库，密码可以使用--pass选项指定。
+# openstack-db --init --service keystone --pass keystone
+Please enter the password for the 'root' MySQL user: 
+Verified connectivity to MySQL.
+Creating 'keystone' database.
+Asking openstack-keystone to sync the database.
+Complete!
+
+如果本机尚未安装mysql-server，此脚本会自动安装之，并且会提醒用户为root用户设定密码。
+
+如果不想使用默认的keystone用户访问其数据，也可以使用下面的命令为keystone服务创建访问数据库的用户。
+# mysql -uroot -p
+mysql> GRANT ALL ON keystone.* TO 'KS_USER'@'%' IDENTIFIED BY '[YOUR_KEYSTONEDB_PASSWORD]';
+mysql> GRANT ALL ON keystone.* TO 'KS_USER'@'localhost' IDENTIFIED BY '[YOUR_KEYSTONEDB_PASSWORD]';
+
+1.3、编辑keystone的主配置文件，使得其使用MySQL做为数据存储池，并配置其使用正确的参数。
+# vim /etc/keystone/keystone.conf
+在[sql]段中，确保与mysql相关的内容类似如下，注意其中的密码为keystone用户访问MySQL服务器所使用的密码：
+connection = mysql://keystone:keystone@localhost/keystone
+
+上面的参数指定连接时，其语法格式为“mysql://[user]:[pass]@[primary IP]/[db name]”。
+
+1.4、配置keystone的管理token
+
+为了使用admin用户管理keystone，可以通过配置keystone的客户端使用SERVICE_TOKEN和SERVICE_ENDPOINT环境变量来连接至Keystone。
+
+# export SERVICE_TOKEN=$(openssl rand -hex 10)
+# export SERVICE_ENDPOINT=http://172.16.200.6:35357/v2.0
+# echo $SERVICE_TOKEN > ~/ks_admin_token
+
+# openstack-config --set /etc/keystone/keystone.conf DEFAULT admin_token 'YOUR_ADMIN_TOKEN'
+其中的‘YOUR_ADMIN_TOKEN’为一个字符串，建议使用一串随机数据，这可以使用openssl命令生成。比如，上面的使用可以使用如下形式：
+# openstack-config --set /etc/keystone/keystone.conf DEFAULT admin_token  $SERVICE_TOKEN
+
+接着启动keystone服务：
+# service openstack-keystone start
+# chkconfig openstack-keystone on
+
+查看进程启动的相关信息：
+# ps auxf | grep -i keystone-all
+root      3660  0.0  0.1 103236   872 pts/0    S+   16:47   0:00          \_ grep -i keystone-all
+keystone  3612  0.0  7.0 270100 34984 ?        S    16:35   0:00 /usr/bin/python /usr/bin/keystone-all --config-file /etc/keystone/keystone.conf
+
+检查日志文件中有无错误提示：
+# grep ERROR /var/log/keystone/keystone.log
+
+
+1.5、初始化新生成的keystone数据库
+
+以管理员的身份初始化keystone数据库
+# keystone-manage db_sync
+
+1.6、设定Keystone为API endpoint
+
+在Openstack中，服务(service)指的是计算(nova)、对象存储(Swift)或映像(image)等，而Horizon(web dashboard)依赖于Keystone registry中的API endpoint(某网络资源或服务的访问路径，通常表现为URL)来访问这些服务，包括Keystone自身。因此，这里需要将Keystone服务自身及访问路径(API endpoint)先加入到Keystone的registry中。
+
+# keystone service-create --name=keystone --type=identity --description="Keystone Identity Service"
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |    Keystone Identity Service     |
+|      id     | 13f56808ea05400f9ae05d72684eeefd |
+|     name    |             keystone             |
+|     type    |             identity             |
++-------------+----------------------------------+
+
+为上面新建的service添加endpoint。注意，其中的service_id的内容为上面service-create命令创建的service的id。
+# keystone endpoint-create \
+  --service_id 13f56808ea05400f9ae05d72684eeefd \
+  --publicurl 'http://172.16.200.6:5000/v2.0' \
+  --adminurl 'http://172.16.200.6:35357/v2.0' \
+  --internalurl 'http://172.16.200.6:5000/v2.0'
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+|   adminurl  |  http://172.16.200.6:35357/v2.0  |
+|      id     | eafd729bb70b4cd7b02ca2a728ec145e |
+| internalurl |  http://172.16.200.6:5000/v2.0   |
+|  publicurl  |  http://172.16.200.6:5000/v2.0   |
+|    region   |            regionOne             |
+|  service_id | 13f56808ea05400f9ae05d72684eeefd |
++-------------+----------------------------------+
+
+如果本机启用了iptables，还需要确保对tcp的5000和35357端口的请求能正常通过。例如，为iptables添加如下规则，记得测试完成后要保存规则至配置文件中。
+# iptables -A INPUT -p tcp -m multiport --dports 5000,35357 -j ACCEPT
+
+
+2 创建user、role及tenant
+
+tenant是OpenStack的Keystone中的一个重要的术语，它相当于一个特定项目(project)或一个特定的组织(origaniztion)等，它实现了资源或identity对象的隔离。用户(user)在认证通过后即能访问资源，其通常会被直接关联至某tenant，因此看起来就像用户是包含于tenant中的。角色(role)是权限的窗口，其可用于快速为一组用户完成相同的授权操作。
+
+keystone可通过两种方式完成用户认证，一种为token认证，一种为credential(如用户名和密码等信息)认证。前面的配置中，为Keystone的管理用户admin提供了token的认证方式，并以之完成了如前所述的服务创建等工作。事实上，Keystone的重要功能之一便是提供用户认证，但为了便于认证信息的管理，其通常基于credential的方式进行。风格统一起见，这里让admin用户基于后一种认证方式完成认证并执行管理工作，事实上，这也是Keystone服务配置的基本要求。
+
+2.1 keystone子命令
+
+keystone有许多子命令，分别用于实现keystone的各种对象管理，如用户创建、删除等。获取其帮助信息及子命令列表，可以使用-h选项，获取某子命令的使用帮助，则可以使用如下格式：
+# keystone help SUB_COMMAND
+
+例如，要获取创建租客的使用tenant-create的使用帮助，可以使用如下命令：
+# keystone help tenant-create
+usage: keystone tenant-create --name <tenant-name>
+                              [--description <tenant-description>]
+                              [--enabled <true|false>]
+
+Create new tenant
+
+Optional arguments:
+  --name <tenant-name>  New tenant name (must be unique)
+  --description <tenant-description>
+                        Description of new tenant (default is none)
+  --enabled <true|false>
+                        Initial tenant enabled status (default true)
+
+2.2 admin tenant
+
+2.2.1 创建用于keystone管理的tenant、角色和用户
+
+创建管理tenant，其名称为admin，描述信息为“Admin Tenant”。
+# keystone tenant-create --name admin --description "Admin Tenant" 
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |           Admin Tenant           |
+|   enabled   |               True               |
+|      id     | b0b356e2c68f4ab29a1556a01aad022d |
+|     name    |              admin               |
++-------------+----------------------------------+
+
+创建admin角色。
+# keystone role-create --name admin
++----------+----------------------------------+
+| Property |              Value               |
++----------+----------------------------------+
+|    id    | fc99371ca2194fdbb35ee46dcec06690 |
+|   name   |              admin               |
++----------+----------------------------------+
+
+创建admin用户，并将其直接关联至前面创建的Admin Tenant。事实上，这里的关联操作也可以不执行，而在为admin赋予角色时进行，如后面所示。
+# keystone user-create --name admin --tenant-id b0b356e2c68f4ab29a1556a01aad022d --pass admin --email admin@magedu.com
++----------+-------------------------------------------------------------------------------------------------------------------------+
+| Property |                                                          Value                                                          |
++----------+-------------------------------------------------------------------------------------------------------------------------+
+|  email   |                                                     admin@magedu.com                                                    |
+| enabled  |                                                           True                                                          |
+|    id    |                                             fd97c9eba1974010a147e95d441d9c3a                                            |
+|   name   |                                                          admin                                                          |
+| password | $6$rounds=40000$Mnul0elEayuu8SrN$YCVt/nA.Maikzmp3mbOGWAIQk9fM4q7T8VvKT0BYNK7YE/8Y86gtMJL5jYj2LlN5PnhXhK0AS.E7.XytBY/731 |
+| tenantId |                                             b0b356e2c68f4ab29a1556a01aad022d                                            |
++----------+-------------------------------------------------------------------------------------------------------------------------+
+
+而后，将admin角色赋予admin用户，正常执行时，此命令没有信息输出。。
+# keystone user-role-add --user-id fd97c9eba1974010a147e95d441d9c3a --role-id fc99371ca2194fdbb35ee46dcec06690 --tenant-id b0b356e2c68f4ab29a1556a01aad022d
+
+2.2.2 为admin用户启用基于credential的认证机制
+
+定义如下环境变量，启用基于credential的用户认证。为了使用方便，下面的环境变量导出命令可以保存至一个配置文件中，如~/.keystonerc_admin。
+# export OS_USERNAME=admin
+# export OS_TENANT_NAME=admin
+# export OS_PASSWORD=admin
+# export OS_AUTH_URL=http://172.16.200.6:35357/v2.0/
+# export PS1='[\u@\h \W(keystone_admin)]\$ '
+
+而后注销基于token认证时创建的环境变量从而禁止admin用户使用token认证。
+# unset SERVICE_TOKEN
+# unset SERVICE_ENDPOINT
+
+验正新的认证机制是否已经生效。
+[root@node1 ~(keystone_admin)]# keystone user-list
++----------------------------------+-------+---------+------------------+
+|                id                |  name | enabled |      email       |
++----------------------------------+-------+---------+------------------+
+| fd97c9eba1974010a147e95d441d9c3a | admin |   True  | admin@magedu.com |
++----------------------------------+-------+---------+------------------+
+
+2.3 服务tenant
+
+上面创建的admin用户用于Keystone的管理工作，而OpenStack的各服务(如swift等)通常需要定义在一个服务tenant中，而且各服务也都需要一个具有管理权限的用户。
+
+# keystone tenant-create --name service --description "Service Tenant"
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |          Service Tenant          |
+|   enabled   |               True               |
+|      id     | 11e27e27f0444ef78efe00ec79b4f93c |
+|     name    |             service              |
++-------------+----------------------------------+
+
+为服务Tenant创建用户nova，以用于后文中的nova服务，密码同用户名。
+# keystone user-create --tenant-id 11e27e27f0444ef78efe00ec79b4f93c --name nova --pass nova --email nova@magedu.com
++----------+-------------------------------------------------------------------------------------------------------------------------+
+| Property |                                                          Value                                                          |
++----------+-------------------------------------------------------------------------------------------------------------------------+
+|  email   |                                                     nova@magedu.com                                                     |
+| enabled  |                                                           True                                                          |
+|    id    |                                             2484cca84c084fba9e4414a7c1062364                                            |
+|   name   |                                                           nova                                                          |
+| password | $6$rounds=40000$U/TWmhtK7wb1izwb$T5/hbOiQIvd9viMokN2VybBB74PlpdsMXKayw6OFF0g4LiCsGrZUKnVRStd8tzDCiBw2R/QCt3t3RYdDRBUlh0 |
+| tenantId |                                             11e27e27f0444ef78efe00ec79b4f93c                                            |
++----------+-------------------------------------------------------------------------------------------------------------------------+
+
+而后，把admin角色赋予nova用户，正常执行时，此命令没有信息输出。
+# keystone user-role-add --tenant-id 11e27e27f0444ef78efe00ec79b4f93c --user-id 2484cca84c084fba9e4414a7c1062364 --role-id fc99371ca2194fdbb35ee46dcec06690
+
+
+为服务Tenant创建用户swift，密码同用户名。后面配置swift服务时将用到此用户。
+# keystone user-create --tenant-id 11e27e27f0444ef78efe00ec79b4f93c --name swift --pass swift --email swift@magedu.com
++----------+-------------------------------------------------------------------------------------------------------------------------+
+| Property |                                                          Value                                                          |
++----------+-------------------------------------------------------------------------------------------------------------------------+
+|  email   |                                                     swift@magedu.com                                                    |
+| enabled  |                                                           True                                                          |
+|    id    |                                             4808aeb6da134942b59c9912f9bc3d0e                                            |
+|   name   |                                                          swift                                                          |
+| password | $6$rounds=40000$ew7m2ahbFHX7mgQ1$fobOBaQcEn5K2BYKJACsSJgNqftrfhLF4uxpyS5Wjf1Ac3PcgSFIvJbcWf2fTewB3fD04//B/fDQ28mDRkV/l0 |
+| tenantId |                                             11e27e27f0444ef78efe00ec79b4f93c                                            |
++----------+-------------------------------------------------------------------------------------------------------------------------+
+
+把admin角色赋予swift用户，正常执行时，此命令没有信息输出。
+# keystone user-role-add --tenant-id 11e27e27f0444ef78efe00ec79b4f93c --user-id 4808aeb6da134942b59c9912f9bc3d0e --role-id fc99371ca2194fdbb35ee46dcec06690
+
+还可以继续为服务tenant创建glance等用户。
+
+
+
+二、Openstack Image Service
+
+Openstack Image服务可用于发现、注册及检索虚拟机映像(image)，它提供了一个RESTful的API，能够让用户查询VM映像的元数据及通过HTTP请求获取映像，并可以让python程序员通过客户端类在python代码中完成类似的所有任务。VM映像文件可以存储在各类存储中，如普通的文件系统、对象存储系统(如Openstack Object Storage)、S3存储及HTTP(仅作为获取映像文件之用，而不能写于此中创建映像文件)等。
+
+2.1 安装配置Glance服务
+
+2.1.1 安装相关软件包
+
+# yum -y install openstack-glance
+
+初始化glance数据库，同时创建其服务同名的用户，并为其指定密码，这里选择使用与服务名同名的密码glance。
+# openstack-db --init --service glance --password glance
+
+如果不想使用默认的glance用户访问其数据，也可以使用下面的命令为glance创建数据库及相关的用户。
+# mysql -uroot -p
+mysql> CREATE DATABASE glance;
+mysql> GRANT ALL ON glance.* TO 'GLANCE_USER'@'%' IDENTIFIED BY 'GLANCE_PASS';
+mysql> GRANT ALL ON glance.* TO 'GLANCE_USER'@'localhost' IDENTIFIED BY 'GLANCE_PASS';
+mysql> FLUSH PRIVILEGES;
+
+2.1.2 创建glance管理用户
+
+提示：以keystone管理员的身份完成如下操作。
+
+首先，创建用户glance，密码同用户名。安全起见，实际使用中，用户名和密码都应该按需修改。
+# keystone user-create --name glance --pass glance --email glance@magedu.com
++----------+-------------------------------------------------------------------------------------------------------------------------+
+| Property |                                                          Value                                                          |
++----------+-------------------------------------------------------------------------------------------------------------------------+
+|  email   |                                                    glance@magedu.com                                                    |
+| enabled  |                                                           True                                                          |
+|    id    |                                             b52fcf90cc15422fbbee66cfabaa49a4                                            |
+|   name   |                                                          glance                                                         |
+| password | $6$rounds=40000$NW8NIAuNgAMQTphr$8SNrvpr8EfBHIR78SgmIViLJBriSg8gszafS46x36h5C10QrxzDoV4MvU3X4aNlc7Kt6L.e2K/CeSyGZmf8zm0 |
+| tenantId |                                                                                                                         |
++----------+-------------------------------------------------------------------------------------------------------------------------+
+
+接着将用户加入前面创建的service tenant中，并将角色admin赋予glance用户。
+# keystone user-role-add --tenant-id 11e27e27f0444ef78efe00ec79b4f93c --user-id b52fcf90cc15422fbbee66cfabaa49a4 --role-id fc99371ca2194fdbb35ee46dcec06690
+
+2.1.3 配置glance-api
+
+编辑/etc/glance/glance-api.conf，配置glance相关属性。
+
+glance-api服务实现了第一版(v1)和第二版(v2)的OpenStack Images API，如果想启用它们，请启用如下两项。
+enable_v1_api = True
+enable_v2_api = True
+
+将glance-api.conf文件最后两段的内容按需修改为类似如下的内容。这些设定也可以使用“openstack-config”的“--set”选项来逐个修改。
+[keystone_authtoken]
+auth_host = 172.16.200.6
+auth_port = 35357
+auth_protocol = http
+admin_tenant_name = service
+admin_user = glance
+admin_password = glance
+
+[paste_deploy]
+config_file = /etc/glance/glance-api-paste.ini
+flavor=keystone
+
+并且要确保sql_connection参数的值配置使用了正确的用户名和密码，本示例中如下所示：
+sql_connection = mysql://glance:glance@localhost/glance
+ 
+此外，glance默认使用“File”做为其存储类型，如果可使用后文安装配置的swift服务来替代这里的“File”类型，还需要修改类似如下选项的值为实际需要的值。这里先采用默认的File类型。
+default_store = swift
+swift_store_auth_address = http://172.16.200.6:5000/v2.0/
+swift_store_user = service:swift  
+# servcie_name:user_name
+swift_store_key = a86850deb2742ec3cb41518e26aa2d89
+
+2.1.4 配置glance-registry
+
+修改/etc/glance/glance-registry.conf最后两段的内容类似如下所示：
+[keystone_authtoken]
+auth_host = 172.16.200.6
+auth_port = 35357
+auth_protocol = http
+admin_tenant_name = service
+admin_user = glance
+admin_password = glance
+
+[paste_deploy]
+config_file = /etc/glance/glance-registry-paste.ini
+flavor=keystone
+
+确保glance-registry-paste.ini文件中启用了如下行：
+[pipeline:glance-registry-keystone]
+pipeline = authtoken context registryapp
+
+
+2.1.5 启动服务
+
+启动glance-api服务：
+# service openstack-glance-api start
+# chkconfig openstack-glance-api on
+
+启动glance-registry服务：
+# service openstack-glance-registry start
+# chkconfig openstack-glance-registry on
+
+2.1.6 填充或迁移数据库：
+
+# glance-manage db_sync
+
+重启glance-api及glance-registry服务：
+# service openstack-glance-registry restart
+# service openstack-glance-api restart
+
+
+2.1.7 在keystone注册glance服务
+
+# keystone service-create --name=glance --type=image --description="Glance Image Service"
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |       Glance Image Service       |
+|      id     | cb9a0db4fae44f1ba250034153f68906 |
+|     name    |              glance              |
+|     type    |              image               |
++-------------+----------------------------------+
+
+# keystone endpoint-create --service_id cb9a0db4fae44f1ba250034153f68906 \
+  --publicurl http://172.16.200.6:9292 \
+  --adminurl http://172.16.200.6:9292 \
+  --internalurl http://172.16.200.6:9292
+
+2.1.8 测试
+
+默认情况下，glance中没有任何映像文件，因此下面的命令将没有任何返回值。如果其不能返回为空，原因可能是配置有问题，请自行检查前面的配置过程。
+# glance image-list
+
+2.2 Image服务管理
+
+2.2.1 glance image-create命令
+
+glance image-create命令用于添加新的虚拟机映像至glance中，glance image-update命令用于修改已经完成更新的映像的属性信息。
+
+image-create命令至少要接受三个参数：--name、--container_format及--disk_format。其中--disk_format用于指明磁盘映像文件的格式，包括raw、qcow2、vhd、vmdk、iso、vdi、aki(amazon kernel image)、ari(amazon ramdisk image)及ami(amazon machine image)等。--container_format用于标明映像文件是否包含了虚拟机的元数据信息，然而，目前Compute服务并未使用此信息，因此，在不确定的情况可以将其指定为bare，而合用的格式主要有bare(没有container或元数据信息)、ovf、aki、ari或ami几种。
+
+2.2.2 映像元数据
+
+glance image-create或glance image-update命令的--property key=value参数能够为映像文件附加元数据信息。而常用的属性主要有：
+
+architecture：hypervisor必须支持的CPU架构，如x86_64、arm等；
+hypervisor_type：hypervisor类型，其能够使用的值包括xen、qemu、kvm、lxc、uml、vmware、hyperv及powervm；
+vm_mode：定义虚拟机模式，即应用于虚拟机的host/guest ABI；例如hvm、xen、uml、exe等；
+
+xenAPI还有其专用的两个属性可以定义：
+auto_disk_config：布尔型属性值，true表示在虚拟机实例启动前磁盘的根分区将被自动调整；
+os_type：image中安装的操作系统类型，如linux、windows等，XenAPI能够根据此属性值来执行不同的操作，如为windows创建fat32格式的交换分区、限制其主机名称少于16个字符等；
+
+VMware API也有如下三个专用属性可以定义：
+vmware_adaptertype：定义hypervisor使用的虚拟SCSI或IDE接口类型，其有效值为lsiLogic、busLogic及ide；
+vmware_ostype：VMware GuestID，用于描述映像文件中的操作系统类型；vmware所支持的类型较多，可以参照thinkvirt.com获取详细信息；默认值为otherGuest；
+vmware_image_version：目前未使用，默认值为1；
+
+2.2.3 获取虚拟机映像
+
+2.2.3.1 CirrOS(test)映像
+
+由Scott Moser维护的一系列用于测试目的的微型虚拟机映像，登录名为cirros，下载地址为https://launchpad.net/cirros/+download。在QEMU或KVM中测试时，官方建议使用QCOW2格式的映像文件。
+
+2.2.3.2 Ubuntu映像
+
+Canonical官方提供了基于Ubuntu的系列映像，登录名为ubuntu，下载地址为http://uec-images.ubuntu.com/。在QEMU或KVM中部署时，建议使用QCOW2格式的映像文件。
+
+2.2.3.3 Fedora映像
+
+Fedora官方提供了预制的Fedora JEOS映像，下载地址为http://berrange.fedorapeople.org/images，目前最新的是为x86_64平台提供为的QCOW2格式的映像f17-x86_64-openstack-sda.qcow2。
+
+2.2.3.4 OpenSUSE和SLES11映像
+
+通过SUSE Studio(http://susestudio.com/)可以很方便地为OpenSUSE和SLES11构建与OpenStack兼容的虚拟应用，比如创建一个OpenSUSE12.1的JEOS映像。
+
+2.2.3.5 Rackspace云生成器映像
+
+Rackspace云生成器(https://github.com/rackerjoe/oz-image-build)提供了多种发行版预制的预制映像，如RedHat、CentOS、Fedora及Ubuntu等。
+
+2.2.4 制作映像的专用工具
+
+Oz(KVM)：Oz是能够为常见Linux发行版创建映像文件的命令行工具，Rackspace就是使用Oz创建的映像文件。在Fedora Project的wiki中，提供了使用Oz创建映像文件的案例，具体请参照https://fedoraproject.org/wiki/Getting_started_with_OpenStack_Nova#Building_an_Image_With_Oz。
+
+VMBuilder(KVM,Xen)：VMBuilder能够为不同的hypervisor创建虚拟机映像文件，它是一个脚本，能够自动收集所需的资源为虚拟机创建映像文件。Ubuntu为之提供了一个使用案例，具体请参照https://help.ubuntu.com/12.04/serverguide/jeos-and-vmbuilder.html。
+
+VeeWee(KVM)：VeeWee通常用于创建Vagrant虚拟工作环境，一种基于Virtualbox、VMware、AWS等虚拟化技术的虚拟化工具。VeeWee也可以用于创建KVM映像。
+
+imagefactory：Aeolus项目的一款工具，用于自动化创建、转换及为不同的云服务商上海映像文件，支持Openstack云。
+
+2.2.5 为Openstack定制映像
+
+映像文件要实现与Openstack兼容，需要顾及多方面的因素。
+
+2.2.5.1 支持元数据服务或配置驱动(config drive)
+
+Openstack支持的映像文件必须能够由Openstack获取到其元数据信息，如ssh公钥以及用户在请求映像文件时提交的用户数据等。这些元数据信息可以通过元数据服务或配置驱动获取，最简单的方式莫过于在映像中安装cloud-init程序。cloud-init用于为云实例提供配置及定制功能，项目的地址为https://launchpad.net/cloud-init。
+
+2.2.5.2 支持对磁盘映像大小进行调整
+
+虚拟机映像文件的磁盘大小由创建映像时的初始大小决定，然而Openstack需要在启动实例时通过指定不同的flavor来使用不同大小的磁盘空间。例如，有着磁盘初始大小为5G的映像文件，在用于创建实例时使用了m1.small这个flavor，虚拟机实例将需要一个大小为10G的主盘。调整实例的磁盘大小时，通过在其尾部填0来完成。
+
+映像文件的分区大小也需要能够根据用户的需要在实例启动时进行调整，否则，在实例启动后，为了能够访问由flavor的配置指定的超出磁盘原始大小的其它空间就不得不手动去调整分区大小。因此，在实例启动时，映像文件需要运行一个脚本以修改分区表，并运行相应的程序(如resize2fs等)调整文件系统，使得其能够适应新的分区大小。
+
+2.3 创建映像文件
+
+为了使用方便，这里采用CirrOS项目制作的映像文件，其也经常被拿来测试Openstack的部署。其地址为https://launchpad.net/cirros，可以按需下载所想尝试使用的版本。这里以cirros-0.3.0-i386-disk.img和cirros-0.3.0-x86_64-disk.img为例。
+
+2.3.1 准备映像文件
+
+# mkdir /stackimages
+# cd /stackimages
+# wget https://launchpad.net/cirros/trunk/0.3.0/+download/cirros-0.3.0-i386-disk.img
+# wget https://launchpad.net/cirros/trunk/0.3.0/+download/cirros-0.3.0-x86_64-disk.img
+
+使用qemu-img命令分别查看两个映像文件的格式信息。
+# qemu-img info cirros-0.3.0-i386-disk.img 
+image: cirros-0.3.0-i386-disk.img
+file format: qcow2
+virtual size: 39M (41126400 bytes)
+disk size: 8.7M
+cluster_size: 65536
+
+# qemu-img info cirros-0.3.0-x86_64-disk.img 
+image: cirros-0.3.0-x86_64-disk.img
+file format: qcow2
+virtual size: 39M (41126400 bytes)
+disk size: 9.3M
+cluster_size: 65536
+
+接下上传cirros两个映像文件。
+
+# glance image-create --name=cirros-0.3.0-i386 --disk-format=qcow2 --container-format=bare < /stackimages/cirros-0.3.0-i386-disk.img 
++------------------+--------------------------------------+
+| Property         | Value                                |
++------------------+--------------------------------------+
+| checksum         | 90169ba6f09b5906a7f0755bd00bf2c3     |
+| container_format | bare                                 |
+| created_at       | 2013-05-26T05:52:19                  |
+| deleted          | False                                |
+| deleted_at       | None                                 |
+| disk_format      | qcow2                                |
+| id               | 16bfa875-8e0a-4cc3-8041-e8c64cca9f5e |
+| is_public        | False                                |
+| min_disk         | 0                                    |
+| min_ram          | 0                                    |
+| name             | cirros-0.3.0-i386                    |
+| owner            | b0b356e2c68f4ab29a1556a01aad022d     |
+| protected        | False                                |
+| size             | 9159168                              |
+| status           | active                               |
+| updated_at       | 2013-05-26T05:52:19                  |
++------------------+--------------------------------------+
+
+# glance image-create --name=cirros-0.3.0-x86_64 --disk-format=qcow2 --container-format=bare < /stackimages/cirros-0.3.0-x86_64-disk.img 
++------------------+--------------------------------------+
+| Property         | Value                                |
++------------------+--------------------------------------+
+| checksum         | 50bdc35edb03a38d91b1b071afb20a3c     |
+| container_format | bare                                 |
+| created_at       | 2013-05-26T05:51:47                  |
+| deleted          | False                                |
+| deleted_at       | None                                 |
+| disk_format      | qcow2                                |
+| id               | 9f92df26-8fd3-42b9-a00c-b9fb2c73ed21 |
+| is_public        | False                                |
+| min_disk         | 0                                    |
+| min_ram          | 0                                    |
+| name             | cirros-0.3.0-x86_64                  |
+| owner            | b0b356e2c68f4ab29a1556a01aad022d     |
+| protected        | False                                |
+| size             | 9761280                              |
+| status           | active                               |
+| updated_at       | 2013-05-26T05:51:48                  |
++------------------+--------------------------------------+
+
+列出上传的映像文件。
+# glance image-list
++--------------------------------------+---------------------+-------------+------------------+---------+--------+
+| ID                                   | Name                | Disk Format | Container Format | Size    | Status |
++--------------------------------------+---------------------+-------------+------------------+---------+--------+
+| 16bfa875-8e0a-4cc3-8041-e8c64cca9f5e | cirros-0.3.0-i386   | qcow2       | bare             | 9159168 | active |
+| 9f92df26-8fd3-42b9-a00c-b9fb2c73ed21 | cirros-0.3.0-x86_64 | qcow2       | bare             | 9761280 | active |
++--------------------------------------+---------------------+-------------+------------------+---------+--------+
+
+也可以使用“glance index”查看映像文件的索引信息。
+# glance index
+ID                                   Name                           Disk Format          Container Format     Size          
+------------------------------------ ------------------------------ -------------------- -------------------- --------------
+16bfa875-8e0a-4cc3-8041-e8c64cca9f5e cirros-0.3.0-i386              qcow2                bare                        9159168
+9f92df26-8fd3-42b9-a00c-b9fb2c73ed21 cirros-0.3.0-x86_64            qcow2                bare                        9761280
+
+
+
+三、安装配置Nova
+
+3.1 准备工作
+
+3.1.1 启用网络接口的PROMISC功能
+
+本示例将基于FlatDHCP网络模型，因此其所有工作可以仅通过一个网络接口完成。在所有的节点上，需要为此接口开启“promisc”标志，这可通过如下命令实现。
+
+# ip link set eth0 promisc on
+
+确认其已经启用“PROMISC”功能。
+# ip link show eth0
+2: eth0: <BROADCAST,MULTICAST,PROMISC,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP qlen 1000
+    link/ether 00:0c:29:ed:4c:10 brd ff:ff:ff:ff:ff:ff
+
+3.1.2 创建桥接接口br100
+
+⑴ 禁用NetworkManager
+
+目前，NetworkManager尚不能支持桥接设备，故此，若使用桥接设备必先以原有的network脚本替换NetworkManager实现网络管理，通过在相关的网关接口中明确声明禁止接受NetworkManager的控制(NM_CONTROLLED=”no”)即可，如果完全不打算使用，甚至也可以直接禁用NetworkManager服务。
+
+# chkconfig  NetworkManager  off
+# chkconfig  network  on
+# service  NetworkManager  stop
+# service  network  start
+
+⑵ 创建桥接设备
+
+创建一个名为brnet0的桥接设备，并将其桥接在eth0网卡上，其实现过程两步即可完成：首先创建一个桥接类型的设备，为其指定地址的获取方式、IP址、子网掩码和网关等属性即可，完全类似于管理一个正常的网络接口，只是其类型TYPE的值要为Bridge（必须大写首字母，且后面的字母使用小写字符）；其次，为eth0接口指定其桥接至刚刚定义的桥接设备即可，需要注意的是，此接口不再需要专门配置IP地址等属性。
+
+在/etc/sysconfig/network-scripts目录中新建名为ifcfg-br0的配置文件，其内容如下：
+
+DEVICE=br100
+BOOTPROTO=none
+DNS1=172.16.0.1
+GATEWAY=172.16.0.1
+IPADDR=172.16.200.6
+NETMASK=255.255.0.0
+NM_CONTROLLED=no
+ONBOOT=yes
+TYPE=Bridge
+USERCTL=no
+DELAY=0
+
+接下将桥接的物理网卡（假设为eth0）关联至前面定义的桥接设备，编辑/etc/sysconfig/network-script/ifcfg-eth0为类似如下内容：
+
+DEVICE=eth0
+BOOTPROTO=none
+NM_CONTROLLED=no
+ONBOOT=yes
+TYPE=Ethernet
+HWADDR=00:0c:29:ed:4c:10
+IPV6INIT=no
+USERCTL=no
+BRIDGE=br100
+
+当然，上述的HWADDR地址应该与实际中的物理网卡的MAC地址保持一致。上述步骤无误后重启network服务即可。
+
+3.1.3 安装桥接管理工具
+
+# yum install bridge-utils
+
+添加桥接接口br100，并重启网络服务
+# brctl addbr br100
+# /etc/rc.d/init.d/network restart
+
+查看桥接接口的信息。
+# brctl show
+bridge name	bridge id		STP enabled	interfaces
+br100		8000.000c29ed4c10	no		eth0
+virbr0		8000.5254003bee3a	yes		virbr0-nic
+
+3.1.4 启动messagbus服务
+
+# service messagebus start
+# chkconfig messagebus on
+
+3.2 安装nova
+
+# yum install openstack-utils memcached qpid-cpp-server 
+# yum install openstack-nova
+
+初始化nova数据库，同时创建其服务同名的用户，并为其指定密码，这里选择使用与服务名同名的密码nova。
+# openstack-db --init --service nova --password nova
+
+如果不想使用默认的nova用户访问其数据，也可以使用下面的命令为nova创建数据库及相关的用户。
+# mysql -uroot -p
+mysql> CREATE DATABASE nova;
+mysql> GRANT ALL ON nova.* TO 'NOVA_USER'@'%' IDENTIFIED BY 'NOVA_PASS';
+mysql> GRANT ALL ON nova.* TO 'NOVA_USER'@'localhost' IDENTIFIED BY 'NOVA_PASS';
+mysql> FLUSH PRIVILEGES;
+
+
+3.3 配置nova
+
+3.3.1 编辑配置文件/etc/nova/nova.conf，修改其内容如下所示：
+
+[DEFAULT]
+# AUTHENTICATION
+auth_strategy=keystone
+
+# LOGS/STATE
+verbose=True
+logdir=/var/log/nova
+state_path=/var/lib/nova
+lock_path=/var/lock/nova
+rootwrap_config=/etc/nova/rootwrap.conf
+
+# SCHEDULER
+compute_scheduler_driver=nova.scheduler.filter_scheduler.FilterScheduler
+
+# VOLUMES
+volume_driver=nova.volume.driver.ISCSIDriver
+volume_group=nova-volume
+volume_name_template=volume-%08x
+iscsi_helper=tgtadm
+
+# DATABASE
+sql_connection=mysql://nova:nova@172.16.200.6/nova
+
+# COMPUTE
+libvirt_type=qemu
+compute_driver=libvirt.LibvirtDriver
+instance_name_template=instance-%08x
+api_paste_config=/etc/nova/api-paste.ini
+
+# set the instances path
+# instances_path=/nova/instances
+
+# New add
+libvirt_nonblocking = True
+libvirt_inject_partition = -1
+
+# COMPUTE/APIS: if you have separate configs for separate services
+# this flag is required for both nova-api and nova-compute
+allow_resize_to_same_host=True
+
+# APIS
+osapi_compute_extension=nova.api.openstack.compute.contrib.standard_extensions
+ec2_dmz_host=172.16.200.6
+s3_host=172.16.200.6
+
+# Qpid
+rpc_backend = nova.openstack.common.rpc.impl_qpid
+qpid_hostname = 172.16.200.6
+
+# GLANCE
+image_service=nova.image.glance.GlanceImageService
+glance_api_servers=172.16.200.6:9292
+
+# NETWORK
+network_manager=nova.network.manager.FlatDHCPManager
+force_dhcp_release=True
+dhcpbridge_flagfile=/etc/nova/nova.conf
+# New Add
+dhcpbridge = /usr/bin/nova-dhcpbridge
+
+firewall_driver=nova.virt.libvirt.firewall.IptablesFirewallDriver
+
+# Change my_ip to match each Compute host
+my_ip=172.16.200.6
+public_interface=eth0
+vlan_interface=eth0
+flat_network_bridge=br100
+flat_interface=eth0
+fixed_range=172.16.200.0/24
+
+# NOVNC CONSOLE
+novncproxy_base_url=http://172.16.200.6:6080/vnc_auto.html
+
+# Change vncserver_proxyclient_address and vncserver_listen to match each compute host
+vncserver_proxyclient_address=172.16.200.6
+vncserver_listen=172.16.200.6
+
+[keystone_authtoken]
+auth_host = 172.16.200.6
+auth_port = 35357
+auth_protocol = http
+admin_tenant_name = service
+admin_user = nova
+admin_password = nova
+signing_dirname = /tmp/keystone-signing-nova
+
+说明：KVM虚拟化要求CPU支持svm或vmx，因此，这里的Openstack所在的系统RHEL6.4必须直接运行于支持这两种特性之一的CPU平台上。如果整个过程是在虚拟机上进行测试的话，比如Openstack所安装的系统RHEL6.4本身就运行于虚拟上，那么，虚拟化技术只能使用qemu而不能使用KVM。此种情形下，需要执行如下步骤，在RHEL6.4启动对qemu的支持。
+(1)安装libguestfs-tools
+# yum -y install libguestfs-tools
+
+(2)设定libvirt类型为qemu
+openstack-config --set /etc/nova/nova.conf DEFAULT libvirt_type qemu
+
+(3)为qemu-kvm创建所需要链接
+# ln -sv  /usr/libexec/qemu-kvm /usr/bin/qemu
+
+(4)重启libvirtd服务
+# service libvirtd restart
+
+3.3.2 导入或迁移nova数据库
+# nova-manage db sync
+
+3.2.3 安装配置qpid队列服务
+
+# yum install -y qpid-cpp-server
+# sed -i -e 's/auth=.*/auth=no/g' /etc/qpidd.conf
+# service qpidd start 
+# chkconfig qpidd on
+
+3.3.4 启动服务
+
+首先创建nova服务的锁文件目录，并将其权限赋予nova用户。
+# mkdir /var/lock/nova
+# chown -R nova.nova /var/lock/nova/
+
+而后启动nova相关的服务，并将其设置为开机自动启动。
+# for svc in api compute network cert console scheduler; do service openstack-nova-$svc start; chkconfig openstack-nova-$svc on; done
+
+查看服务启动状况：
+# nova-manage service list
+Binary           Host                                 Zone             Status     State Updated_At
+nova-cert        node1.magedu.com                     nova             enabled    :-)   2013-05-26 05:00:24
+nova-console     node1.magedu.com                     nova             enabled    :-)   2013-05-26 05:00:24
+nova-compute     node1.magedu.com                     nova             enabled    :-)   2013-05-26 05:00:24
+nova-network     node1.magedu.com                     nova             enabled    :-)   2013-05-26 05:00:24
+nova-scheduler   node1.magedu.com                     nova             enabled    :-)   2013-05-26 05:00:24
+
+检验服务启动时是否有错误产生：
+# grep -i ERROR /var/log/nova/*
+
+3.3.5 创建nova网络
+
+创建nova网络要通过“nova-manager network create”命令进行，其可以接受许多选项，获取使用帮助的方式如下所示：
+# nova-manage network create --help
+
+例如，下面创建一个名为“private”的网络，桥接设备的名称为br100。
+# nova-manage network create  --label=private --multi_host=T --fixed_range_v4=172.16.200.0/24 --bridge_interface=eth0 --bridge=br100 --num_networks=1 --network_size=256
+
+想看创建的网络。
+# nova-manage network list
+id   	IPv4              	IPv6           	start address  	DNS1           	DNS2           	VlanID         	project        	uuid           
+1    	172.16.200.0/24   	None           	172.16.200.2   	8.8.4.4        	None           	None           	None           	c62364cb-9991-488b-ac6e-13f815f62c18
+
+3.4 在KeyStone中注册Nova compute API
+
+接下来需要将Nova Compute API在KeyStone中注册，dashboard需要基于此与Nova交互。下面的部分要以keystone的管理员admin身份执行，如果当前未为连接KeyStone设置环境变量，可以使用“source ~/.keystonerc_admin”进行。
+
+# keystone service-create --name=nova --type=compute --description="Nova Compute Service"
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |       Nova Compute Service       |
+|      id     | 2ac437bbfc0641deb65a569b2ce9bd33 |
+|     name    |               nova               |
+|     type    |             compute              |
++-------------+----------------------------------+
+
+# keystone endpoint-create --service_id 2ac437bbfc0641deb65a569b2ce9bd33 \
+  --publicurl "http://172.16.200.6:8774/v1.1/\$(tenant_id)s" \
+  --adminurl "http://172.16.200.6:8774/v1.1/\$(tenant_id)s" \
+  --internalurl "http://172.16.200.6:8774/v1.1/\$(tenant_id)s"
++-------------+---------------------------------------------+
+|   Property  |                    Value                    |
++-------------+---------------------------------------------+
+|   adminurl  | http://172.16.200.6:8774/v1.1/$(tenant_id)s |
+|      id     |       12ab1ca2cf5c4497a34476894efc2122      |
+| internalurl | http://172.16.200.6:8774/v1.1/$(tenant_id)s |
+|  publicurl  | http://172.16.200.6:8774/v1.1/$(tenant_id)s |
+|    region   |                  regionOne                  |
+|  service_id |       2ac437bbfc0641deb65a569b2ce9bd33      |
++-------------+---------------------------------------------+
+
+
+
+
+
+四、运行VM实例
+
+4.1 安全组(security group)
+
+Compute服务通过安全组(security group)控制通过哪些网络协议(TCP,UDP,ICMP)、端口及IP地址允许对实例进行访问。安全组是tenant级别的概念，每个tenant都有其自己的安全组，且都有一个默认的“default”组。在某VM实例启动时，如果没有为其指定特定的安全组，其将使用默认的安全组。使用“nova secgroup-list”命令可以查看安全组。
+
+# nova secgroup-list
++---------+-------------+
+| Name    | Description |
++---------+-------------+
+| default | default     |
++---------+-------------+ 
+
+“nova secgroup-add-rule”可用于为安全组定义访问规则，如下面的命令就实现了允许所有IP地址通过TCP协议的22端口访问关联的VM实例。
+# nova secgroup-add-rule default tcp 22 22 0.0.0.0/0
++-------------+-----------+---------+-----------+--------------+
+| IP Protocol | From Port | To Port | IP Range  | Source Group |
++-------------+-----------+---------+-----------+--------------+
+| tcp         | 22        | 22      | 0.0.0.0/0 |              |
++-------------+-----------+---------+-----------+--------------+
+
+如果要允许对VM实例发起ping请求，还要开放其ICMP协议。不过，ICMP协议的相关规则需要指定ICMP报文类型(号码)而非类似TCP或UDP协议的端口。如果要开放所有的报文类型，则使用“-1”这个号码。例如，允许所有主机对VM实例发起任意类型的ICMP请求，则可以使用下面的命令来定义规则。
+# nova secgroup-add-rule default icmp -1 -1 0.0.0.0/0
++-------------+-----------+---------+-----------+--------------+
+| IP Protocol | From Port | To Port | IP Range  | Source Group |
++-------------+-----------+---------+-----------+--------------+
+| icmp        | -1        | -1      | 0.0.0.0/0 |              |
++-------------+-----------+---------+-----------+--------------+
+
+4.2 SSH公钥注入
+
+只要对应的VM实例支持使用SSH服务，Compute服务可以注入SSH公钥信息至此实例的某帐号中。“nova keypair-add”命令能够生成一对密钥(不保存至文件中)，并将其公钥添加至Compute服务；当然，也可以只用于将现有的某密钥对儿的公钥添加至Compute服务中。为了使用上的方便，这里先使用ssh-keygen命令生成一对密钥文件，而后将其公钥上传至Compute服务中。
+
+# ssh-keygen -t rsa -P ''
+# nova keypair-add  --pub-key  .ssh/id_rsa.pub  testkey
+
+显示添加的密钥信息，并确保其与本地密钥文件的Fingerprint信息完全匹配。
+# nova keypair-list
++---------+-------------------------------------------------+
+| Name    | Fingerprint                                     |
++---------+-------------------------------------------------+
+| testkey | 71:5d:e4:80:c4:7b:53:3a:c9:8f:37:c0:0f:80:08:79 |
++---------+-------------------------------------------------+
+
+# ssh-keygen -l -f .ssh/id_rsa.pub
+2048 71:5d:e4:80:c4:7b:53:3a:c9:8f:37:c0:0f:80:08:79 .ssh/id_rsa.pub (RSA)
+
+4.3 确保Compute节点的每个服务都已正常运行
+
+在启动任何VM实例前，要确认Compute节点上的如下服务都已经正常运行。
+
+libvirtd：所有的nova服务均依赖于此服务；
+nova-api：用于响应请求以启动VM实例，及提供VM实例的元数据信息等；
+nova-scheduler：响应用户请求将用户请求启动的VM实例调度至某Compute节点运行；
+nova-compute：与hypervisor进行交互以管理VM实例；
+nova-network：执行Openstack的网络任务，如将IP地址分配给某VM实例，以及启用安全组规则等；
+
+# nova-manage service list
+Binary           Host                                 Zone             Status     State Updated_At
+nova-cert        node1.magedu.com                     nova             enabled    :-)   2013-05-26 07:02:45
+nova-console     node1.magedu.com                     nova             enabled    :-)   2013-05-26 07:02:46
+nova-compute     node1.magedu.com                     nova             enabled    :-)   2013-05-26 07:02:52
+nova-network     node1.magedu.com                     nova             enabled    :-)   2013-05-26 07:02:47
+nova-scheduler   node1.magedu.com                     nova             enabled    :-)   2013-05-26 07:02:46
+
+如果有某服务没有启动，在此处启动其即可。
+
+4.4 启动一个实例 
+
+在启动一个VM实例时，需要为其指定一个flavor，也即实例类型，其用于指定此实例的规格，如内存大小、磁盘数量及空间大小、VCPU的个数等。“nova flavor-list”可以查看所有的flavor。
+
+# nova flavor-list
++----+-----------+-----------+------+-----------+------+-------+-------------+-----------+-------------+
+| ID | Name      | Memory_MB | Disk | Ephemeral | Swap | VCPUs | RXTX_Factor | Is_Public | extra_specs |
++----+-----------+-----------+------+-----------+------+-------+-------------+-----------+-------------+
+| 1  | m1.tiny   | 512       | 0    | 0         |      | 1     | 1.0         | True      | {}          |
+| 2  | m1.small  | 2048      | 20   | 0         |      | 1     | 1.0         | True      | {}          |
+| 3  | m1.medium | 4096      | 40   | 0         |      | 2     | 1.0         | True      | {}          |
+| 4  | m1.large  | 8192      | 80   | 0         |      | 4     | 1.0         | True      | {}          |
+| 5  | m1.xlarge | 16384     | 160  | 0         |      | 8     | 1.0         | True      | {}          |
++----+-----------+-----------+------+-----------+------+-------+-------------+-----------+-------------+
+
+“nova flavor-create”可用于创建一个新的flavor，其使用格式请自行获取命令的使用帮助。下面就创建了一个名为“flavor.cirros”的flavor。
+
+# nova flavor-create --swap 256 flavor.cirros 6 128 2 2 
++----+---------------+-----------+------+-----------+------+-------+-------------+-----------+-------------+
+| ID | Name          | Memory_MB | Disk | Ephemeral | Swap | VCPUs | RXTX_Factor | Is_Public | extra_specs |
++----+---------------+-----------+------+-----------+------+-------+-------------+-----------+-------------+
+| 6  | flavor.cirros | 128       | 2    | 0         | 256  | 2     | 1           | True      | {}          |
++----+---------------+-----------+------+-----------+------+-------+-------------+-----------+-------------+
+
+另外，启动实例还依赖于可用的映像文件。在前文的演示中已经添加过两个示例性的映像文件，可以使用“nova image-list”获取其相关信息。
+# nova image-list
++--------------------------------------+---------------------+--------+--------+
+| ID                                   | Name                | Status | Server |
++--------------------------------------+---------------------+--------+--------+
+| 16bfa875-8e0a-4cc3-8041-e8c64cca9f5e | cirros-0.3.0-i386   | ACTIVE |        |
+| 9f92df26-8fd3-42b9-a00c-b9fb2c73ed21 | cirros-0.3.0-x86_64 | ACTIVE |        |
++--------------------------------------+---------------------+--------+--------+
+
+具备上述条件后，“nova boot”命令即可用来创建并启动一个实例了。此命令还可以添加--debug选项，以诊断创建实例过程中的问题。
+
+# nova boot --flavor 6 --image 9f92df26-8fd3-42b9-a00c-b9fb2c73ed21 --key_name testkey --security_group default cirros1
++-------------------------------------+--------------------------------------+
+| Property                            | Value                                |
++-------------------------------------+--------------------------------------+
+| OS-DCF:diskConfig                   | MANUAL                               |
+| OS-EXT-SRV-ATTR:host                | None                                 |
+| OS-EXT-SRV-ATTR:hypervisor_hostname | None                                 |
+| OS-EXT-SRV-ATTR:instance_name       | instance-00000007                    |
+| OS-EXT-STS:power_state              | 0                                    |
+| OS-EXT-STS:task_state               | scheduling                           |
+| OS-EXT-STS:vm_state                 | building                             |
+| accessIPv4                          |                                      |
+| accessIPv6                          |                                      |
+| adminPass                           | p4MSM6Q2osKP                         |
+| config_drive                        |                                      |
+| created                             | 2013-05-26T07:56:26Z                 |
+| flavor                              | flavor.cirros                        |
+| hostId                              |                                      |
+| id                                  | 176c8369-b546-47f1-937f-6e657b793150 |
+| image                               | cirros-0.3.0-x86_64                  |
+| key_name                            | testkey                              |
+| metadata                            | {}                                   |
+| name                                | cirros1                              |
+| progress                            | 0                                    |
+| security_groups                     | [{u'name': u'default'}]              |
+| status                              | BUILD                                |
+| tenant_id                           | b0b356e2c68f4ab29a1556a01aad022d     |
+| updated                             | 2013-05-26T07:56:27Z                 |
+| user_id                             | fd97c9eba1974010a147e95d441d9c3a     |
++-------------------------------------+--------------------------------------+
+
+查看创建的VM实例cirros1：
+# nova list
++--------------------------------------+---------+--------+----------------------+
+| ID                                   | Name    | Status | Networks             |
++--------------------------------------+---------+--------+----------------------+
+| 176c8369-b546-47f1-937f-6e657b793150 | cirros1 | ACTIVE | private=172.16.200.2 |
++--------------------------------------+---------+--------+----------------------+
+
+基于nova控制台连接至VM实例cirros1：
+# nova console-log cirros1
+===== cloud-final: system completely up in 6.23 seconds ====
+  instance-id: i-00000007
+  public-ipv4: 
+  local-ipv4 : 172.16.200.2
+wget: server returned error: HTTP/1.1 404 Not Found
+cloud-userdata: failed to read user data url: http://169.254.169.254/2009-04-04/user-data
+WARN: /etc/rc3.d/S99-cloud-userdata failed
+  ____               ____  ____
+ / __/ __ ____ ____ / __ \/ __/
+/ /__ / // __// __// /_/ /\ \ 
+\___//_//_/  /_/   \____/___/ 
+ http://launchpad.net/cirros
+
+
+login as 'cirros' user. default password: 'cubswin:)'. use 'sudo' for root.
+cirros login: 
+
+另外，也可以通过ssh连接至VM实例cirros1，而且由于控制节点已经直接向cirrors中注入了ssh公钥，连接至VM实例时不再需要提供密码即可建立SSH会话。
+# ssh -l cirros  172.16.200.2
+
+
+
+五、安装配置其它Compute节点
+
+类似前面的Nova的安装配置过程，首先要配置好网络属性，而后安装Nova，并为nova提供配置文件。其配置信息中，以下几项要按需修改为当前节点的IP地址。配置完成后，启动相关的服务(openstack-nova-compute、openstack-nove-network和libvirtd)即可。
+• my_ip
+• vncserver_listen
+• vncserver_proxyclient_address
+
+需要注意的是，控制节点一般不应该运行VM实例，因此，当专用的Compute节点配置完成后，即可禁止控制节点上的服务。如下面的命令即禁用了控制节点node1.magedu.com上的nova-compute服务，这样一来，在启动VM实例时就不再会将其调度至控制节点。
+# nova-manage service disable --host=node1.magedu.com --service=nova-compute
+
+
+
+六、Object Storage (swift)
+
+OpenStack Object Storage（Swift）是OpenStack的子项目之一，它使用借助于商用服务器来构建冗余、可扩展的分布式对象存储集群，存储容量可达PB级。Swift基于Python开发，前身是Rackspace Cloud Files项目，Rackspace加入到OpenStack社区后将Cloud Files的代码贡献给了社区，后逐渐发展为现在Swift。
+
+在分布式对象存储中的一个关键问题是数据存储位置的选择及定位。Ring是Swift中最重要的组件，用于记录存储对象与物理位置间映射关系。在涉及查询account、container、object信息时就需要查询集群的ring信息。
+ 
+先来看一下Swift文档中关于Ring的描述：
+   Ring用来确定数据驻留在集群中的位置；有单独对应于Account数据库、container数据库和单个object的ring；
+   Ring中每个partition在集群中都(默认)有3个replica；每个partition的位置由ring来维护,并存储在映射中；
+   Ring使用zone的概念来保证数据的隔离；每个partition的replica都确保放在了不同的zone中；一个zone可以是一个硬盘，一个服务器，一个机架，一个交换机，甚至是一个数据中心；
+
+6.1 Swift的主要组件
+
+6.1.1 Ring文件
+
+ring文件由一致性哈希算法生成，它的主要作用是存储名字到位置的映射；其主要分为三类，分别是：account.ring，container.ring，object.ring。
+
+对于account的请求，就能通过account_name查询account.ring得到{‘/account_name’ : account_db_position}的映射，从而知道account数据库文件在集群的位置；
+对于container的请求，通过account_name和container_name查询container.ring文件，得到{‘/account_name/container_name’ : container_db_position}的映射；
+对于object的请求，通过account_name，container_name，object_name查询object.ring文件，得到{‘/account_name/container_name/object_name’ : object_position}的映射；
+
+Ring文件作为一个静态文件存储在每个节点的/etc/swift目录下，被用于各节点之间的位置查询，使得swift的内部网络是一个P2P网络，不依赖某几个节点进行位置查询，避免了单点瓶颈。
+生成ring文件的一致性哈希算法不但为数据的冗余性，分区容忍性提供了保证，也为整体架构上实现性能、容量的横向扩展奠定了基础。
+
+6.1.2 proxy-server
+
+proxy-server是proxy节点中唯一运行的守护进程，也是swift集群的endpoint，向用户提供RESTful API。
+
+对于用户的请求，proxy-server会根据配置文件的配置，将请求交给各个中间件进行处理，其中最重要的就是Auth中间件（认证），在处理完成后会根据请求路径将请求转发给相应的storage node中的account-server。container-server或object-server进程处理。
+
+swift集群的流入数据和流出数据都需要经过proxy-server，proxy-server不会对数据进行缓存。
+
+6.1.3 auth-server
+
+这是个验证服务进程，它为用户生成token和验证每个请求的token及token的权限。swift的验证服务是作为一个中间件被proxy-server使用，是可选的，可以自己开发，也可以使用OpenStack Keystone。Keystone是官方开发的验证服务，使用Keystone可以无缝的与其它OpenStack项目整合。
+
+6.1.4 account-server
+
+account-server是存储节点(storage node)中负责处理针对account的GET、HEAD、PUT、DELETE及RELICATION等请求的守护进程，它使用sqlite的数据库文件保存account的相关信息。
+
+6.1.5 container-server
+
+container-server是存储节点上负责处理针对container的GET、HEAD、PUT、DELETE、RELICATION请求的服务进程，它也使用sqlite的数据库文件保存container的相关信息。
+
+6.1.6 object-server
+
+object-server是存储节点上负责处理针对object的GET、HEAD、PUT、PSOT、DELETE、RELICATION请求的守护进程，它直接操作object，并利用XFS文件系统的xattr包存object的元数据。
+
+6.1.7 account-auditor、container-auditor和object-auditor
+
+这三个进程同样运行在存储节点上，分别用于检测account的db文件、container的db文件和object是否损坏，如果文件损坏，其将会向存储有其它副本的存储节点请求副本，并以之替换本地损坏的副本。
+
+6.1.8 account-replicator、container-replicator和object-replicator
+
+这三个进程运行在存储节点上，分别负责account的db文件、container的db文件和object在集群中副本的同步。
+例如，一个object在swift集群中通常被存储在3个不同的storage node中，对于一个PUT /account/container/object的请求，proxy-server会根据 /account/container/object查询ring文件，得到该object应该存储的节点列表（长度为3），proxy-server会将请求转发到这三个节点。只要有两个节点写入成功，就认为这次PUT操作成功。写入失败的节点在一段时间后将会得到写入成功的节点object-replicator进程推送过来的数据。
+
+6.1.9 container-updater、account-updater
+
+这两个进程运行在存储节点上，负责container数据库和account数据库的异步更新。在高并发请求的场景下，container-server和account-server可能无法实时处理对数据库更新的请求，此时，这些请求将被放置于本地化到队列，由updater进程以异步方式执行更新。
+
+
+6.2 安装配置Swift的存储节点
+
+尽管本示例将swift的多个角色均安装于同一个物理节点，但为了规范及便于大规模部署时参考，这里仍然将其配置过程要开阐述。
+
+6.2.1 安装swift组件
+
+# yum install openstack-utils openstack-swift-account openstack-swift-container openstack-swift-object xfsprogs python-keystone
+
+6.2.2 为每个用于存储的卷配置XFS文件系统
+
+每个磁盘均直接使用单个分区，而后将其格式化为XFS文件系统。本示例中准备了/dev/sdb、/dev/sdc和/dev/sdd三块磁盘设备，其分区过程不再演示，仅给出其中一个设备(/dev/sdb1)的文件系统创建步骤，其它设备的类同。
+
+# mkfs.xfs -i size=1024 /dev/sdb1
+# echo "/dev/sdb1 /srv/node/sdb1 xfs noatime,nodiratime,nobarrier,logbufs=8 0 0" >> /etc/fstab
+# mkdir -p /srv/node/sdb1
+# mount /srv/node/sdb1
+# chown -R swift:swift /srv/node
+
+说明：如果想快速处理三个设备，可以使用下面的脚本实现。
+
+# for PART in sdb1 sdc1 sdd1; do \
+	mkfs.xfs -f -i size=1024 /dev/$PART; \
+ 	echo "/dev/$PART /srv/node/$PART xfs noatime,nodiratime,nobarrier,logbufs=8 0 0" >> /etc/fstab; \
+ 	mkdir -p /srv/node/$PART; \
+ 	mount /srv/node/$PART; \
+ 	chown -R swift:swift  /srv/node; done
+
+6.2.3 启动各服务进程
+
+# for SERVICE in account container object; do service openstack-swift-$SERVICE start; done
+#  for SERVICE in account container object; do chkconfig openstack-swift-$SERVICE on; done
+
+
+6.3 安装配置Swift的代理节点
+
+6.3.1 安装swift-proxy服务
+
+# yum install openstack-swift-proxy memcached python-keystone openstack-utils python-keystoneclient
+
+6.3.2 启动memcached服务
+
+通过/etc/sysconfig/memcached配置文件为memcached服务配置好合适的参数后即可启动此服务。
+
+# service memcached start
+# chkconfig memcached on
+
+6.3.3 配置swift-proxy
+
+编辑swift-proxy的配置文件/etc/swift/proxy-server.conf，确保其如下项为实际需要。
+
+memcache_servers = 172.16.200.8:11211
+
+admin_tenant_name = service
+admin_user = swift
+admin_password = swift
+auth_host = 172.16.200.6
+auth_port = 35357
+auth_protocol = http
+
+这里需要说明的是，swift用户在前面的第一步中已然创建，如果你没有按照文档的步骤在第一步中创建此用户，可使用admin用户替代之，亦或此时创建swift用户均可。
+
+6.3.4 创建所需ring
+
+通过“swift-ring-builder”命令创建account、container和object所用的ring文件。
+
+# cd /etc/swift
+# swift-ring-builder account.builder create 18 3 1
+# swift-ring-builder container.builder create 18 3 1
+# swift-ring-builder object.builder create 18 3 1
+
+上面的命令后面三个参数中，18表示构建一致hash环时其环的大小，即使用2^18大小的环。实际使用中，可以根据节点数规模进行调整，最大为32；3表示为每个对象存储3个副本；最后的1表示多长时间可以移动一次某partiton。
+
+6.3.5 将存储设备关系至ring
+
+在ring文件创建完成后，还需要将每个存储设备添加至每个ring上，而且通常需要以account、container和object的顺序进行。其格式为：
+
+# swift-ring-builder account.builder add z<ZONE>-<STORAGE_LOCAL_NET_IP>:6002/<DEVICE> 100
+# swift-ring-builder container.builder add z<ZONE>-<STORAGE_LOCAL_NET_IP_1>:6001/<DEVICE> 100
+# swift-ring-builder object.builder add z<ZONE>-<STORAGE_LOCAL_NET_IP_1>:6000/<DEVICE> 100
+
+其中<ZONE>为zone编号，如z1表示第一个zone；<STORAGE_LOCAL_NET_IP>表示存储节点自己的IP地址；<DEVICE>表示对应设备的设备名称或挂载点名称(二者通常相同)，如/dev/sdb1设备的挂载点为/srv/node/sdb1时，其<DEVICE>即为sdb1。因此，将sdb1、sdc1和sdd1三个设备添加至ring文件可通过如下命令实现。
+
+# swift-ring-builder account.builder add z1-172.16.200.8:6002/sdb1 100
+# swift-ring-builder container.builder add z1-172.16.200.8:6001/sdb1 100
+# swift-ring-builder object.builder add z1-172.16.200.8:6000/sdb1 100
+
+# swift-ring-builder account.builder add z2-172.16.200.8:6002/sdc1 100
+# swift-ring-builder container.builder add z2-172.16.200.8:6001/sdc1 100
+# swift-ring-builder object.builder add z2-172.16.200.8:6000/sdc1 100
+
+# swift-ring-builder account.builder add z3-172.16.200.8:6002/sdd1 100
+# swift-ring-builder container.builder add z3-172.16.200.8:6001/sdd1 100
+# swift-ring-builder object.builder add z3-172.16.200.8:6000/sdd1 100
+
+查看每个ring文件的内容，验正添加结果：
+
+# swift-ring-builder account.builder
+account.builder, build version 3
+262144 partitions, 3 replicas, 3 zones, 3 devices, 100.00 balance
+The minimum number of hours before a partition can be reassigned is 1
+Devices:    id  zone      ip address  port      name weight partitions balance meta
+             0     1    172.16.200.8  6002      sdb1 100.00          0 -100.00 
+             1     2    172.16.200.8  6002      sdc1 100.00          0 -100.00 
+             2     3    172.16.200.8  6002      sdd1 100.00          0 -100.00
+
+# swift-ring-builder container.builder
+container.builder, build version 3
+262144 partitions, 3 replicas, 3 zones, 3 devices, 100.00 balance
+The minimum number of hours before a partition can be reassigned is 1
+Devices:    id  zone      ip address  port      name weight partitions balance meta
+             0     1    172.16.200.8  6001      sdb1 100.00          0 -100.00 
+             1     2    172.16.200.8  6001      sdc1 100.00          0 -100.00 
+             2     3    172.16.200.8  6001      sdd1 100.00          0 -100.00 
+
+# swift-ring-builder object.builder
+object.builder, build version 3
+262144 partitions, 3 replicas, 3 zones, 3 devices, 100.00 balance
+The minimum number of hours before a partition can be reassigned is 1
+Devices:    id  zone      ip address  port      name weight partitions balance meta
+             0     1    172.16.200.8  6000      sdb1 100.00          0 -100.00 
+             1     2    172.16.200.8  6000      sdc1 100.00          0 -100.00 
+             2     3    172.16.200.8  6000      sdd1 100.00          0 -100.00 
+
+
+使用如下命令重新平衡三个环，即将对应的设备分布式环中的节点上。不过，执行这些命令可能会需要一些时间。
+# swift-ring-builder account.builder rebalance
+# swift-ring-builder container.builder rebalance
+# swift-ring-builder object.builder rebalance
+
+执行完成后，它们被保存为三个压缩文件account.ring.gz、container.ring.gz和object.ring.gz，请自行确保有些三个文件。在多节点的场景中，这三个文件需要复制到每个代理节点和存储节点的/etc/swift目录中。
+
+确保每个节点的/etc/swift目录及其内部子目录和文件的属主为swift用户，属组为swift组。
+# chown -R swift:swift /etc/swift
+
+另外，最好为swift设定一个hash key：
+# openstack-config --set /etc/swift/swift.conf swift-hash swift_hash_path_suffix $(openssl rand -hex 10)
+
+6.3.6 启动代理服务
+
+# service openstack-swift-proxy start
+# chkconfig openstack-swift-proxy on
+
+6.4 在KeyStone中注册swift
+
+接下来需要将swift在KeyStone中注册，dashboard需要基于此与swift交互。下面的部分要以keystone的管理员admin身份执行，如果当前未为连接KeyStone设置环境变量，可以使用“source ~/.keystonerc_admin”进行。
+
+在Keystone中注册swift服务：
+# keystone service-create --name swift --type object-store --description "Swift Storage Service"
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |      Swift Storage Service       |
+|      id     | 712004c454f144e0bf0d08d7c3fe2db4 |
+|     name    |              swift               |
+|     type    |           object-store           |
++-------------+----------------------------------+
+
+为上面注册的服务提供访问路径：
+# keystone endpoint-create --service_id 712004c454f144e0bf0d08d7c3fe2db4 \
+    --publicurl "http://172.16.200.8:8080/v1/AUTH_\$(tenant_id)s" \
+    --adminurl "http://172.16.200.8:8080/v1/AUTH_\$(tenant_id)s" \
+    --internalurl "http://172.16.200.8:8080/v1/AUTH_\$(tenant_id)s"
++-------------+------------------------------------------------+
+|   Property  |                     Value                      |
++-------------+------------------------------------------------+
+|   adminurl  | http://172.16.200.8:8080/v1/AUTH_$(tenant_id)s |
+|      id     |        44d8498d194b4166afe38c2981d67bfd        |
+| internalurl | http://172.16.200.8:8080/v1/AUTH_$(tenant_id)s |
+|  publicurl  | http://172.16.200.8:8080/v1/AUTH_$(tenant_id)s |
+|    region   |                   regionOne                    |
+|  service_id |        712004c454f144e0bf0d08d7c3fe2db4        |
++-------------+------------------------------------------------+
+
+6.5 测试swift服务是否已经正常工作
+
+通过keystone客户端向认证服务器keystone发起帐号验正请求。其中的“-U service:swift”格式为“Tenant_Name:Swift_Admin_User”，“-K swift”格式为“-K Swift_Admin_Password”。
+# swift -V 2.0 -A http://172.16.200.6:5000/v2.0 -U service:swift -K swift stat
+   Account: AUTH_11e27e27f0444ef78efe00ec79b4f93c
+Containers: 0
+   Objects: 0
+     Bytes: 0
+Accept-Ranges: bytes
+X-Timestamp: 1369567334.12750
+
+为了方便上面命令的执行，可以在swift客户端上声明如下环境变量。也可以直接将命令保存至配置文件中，如~/.swiftrc_admin，以便之后多次source使用。
+# export OS_USERNAME=swift
+# export OS_TENANT_NAME=service
+# export OS_PASSWORD=swift
+# export OS_AUTH_URL=http://172.16.200.6:35357/v2.0/
+# export PS1='[\u@\h \W(swift_admin)]\$ '
+
+而后使用就可以将上面的第一个测试命令替换为如下格式：
+# swift stat
+
+swift有多个子命令可以使用，其中upload可用于上传文件或目录，download可用于下载文件或目录。例如创建一个测试文件并上传文件至swift中。
+# cd /tmp
+# dd if=/dev/zero of=localfile bs=1024 count=5
+# swift upload testfile1 localfile
+
+显示上传的文件列表：
+# swift list 
+testfile1
+
+下载文件至本地：
+# swift download testfile1
+
+
+
+七、OpenStack Hirizon
+
+以下操作在控制节点node1.magedu.com上进行。
+
+7.1 安装配置Horizon服务
+
+7.1.1 安装
+
+# yum install -y memcached python-memcached mod_wsgi openstack-dashboard
+
+7.1.2 为dashboard创建Member角色
+
+dashboard依赖于keystone的Member角色，因此，需要为其创建此默认角色。
+
+# keystone role-create --name Member
++----------+----------------------------------+
+| Property |              Value               |
++----------+----------------------------------+
+|    id    | 191ba35b1dfe4982bbdda1b0d781f73a |
+|   name   |              Member              |
++----------+----------------------------------+
+
+7.1.3 配置openstack-dashboard
+
+确保dashboard的配置文件/etc/openstack-dashboard.conf中的默认角色定义如下所示。
+
+OPENSTACK_HOST = "172.16.200.6"
+
+OPENSTACK_KEYSTONE_DEFAULT_ROLE = "Member"
+
+CACHES = {
+    'default': {
+        'BACKEND' : 'django.core.cache.backends.memcached.MemcachedCache',
+        'LOCATION' : '127.0.0.1:11211',
+    }
+}
+
+SECRET_KEY ='fdafidoauf8a9re78wfjdalvfdksafjds'
+
+7.1.4 启动httpd服务，并测试访问
+
+# service httpd start
+# ckconfig httpd on
+
+基于HTTP进行访问测试：
+http://172.16.200.6/dashboard
+
+7.2 启用控制台访问
+
+yum install -y openstack-nova-novncproxy
+
+监听所有地址的6080端口：
+openstack-config --set /etc/nova/nova.conf DEFAULT novncproxy_host 0.0.0.0
+openstack-config --set /etc/nova/nova.conf DEFAULT novncproxy_port 6080
+
+openstack-config --set /etc/nova/nova.conf DEFAULT novncproxy_base_url http://node1.magedu.com:6080/vnc_auto.html
+
+openstack-config --set /etc/nova/nova.conf DEFAULT vnc_enabled true
+
+配置VNC服务真正监听的地址
+openstack-config --set /etc/nova/nova.conf DEFAULT vncserver_listen 127.0.0.1
+openstack-config --set /etc/nova/nova.conf DEFAULT vncserver_proxyclient_address 127.0.0.1
+
+service openstack-nova-novncproxy start
+service openstack-nova-consoleauth start
+chkconfig openstack-nova-novncproxy on
+chkconfig openstack-nova-consoleauth on
+
+
+
+
+
+
+
+
+
+补充：需要额外下载：dnsmasq-utils、Django14和pytz
+
+
+
+
+
+# yum install openstack-utils dnsmasq-utils
+
+
+# yum install openstack-keystone 
+
+keystone使用MySQL服务器
+# openstack-db --init --service keystone
+
+
+# keystone service-create --name=keystone --type=identity --description="Keystone Identity Service"
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |    Keystone Identity Service     |
+|      id     | db381d733fcc428d89cbf67ef6b3c173 |
+|     name    |             keystone             |
+|     type    |             identity             |
++-------------+----------------------------------+
+
+
+
+# keystone endpoint-create --service-id db381d733fcc428d89cbf67ef6b3c173 --publicurl 'http://172.16.200.1:5000/v2.0' --adminurl 'http://172.16.200.1:35357/v2.0' --internalurl 'http://172.16.200.1:5000/v2.0'
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+|   adminurl  |  http://172.16.200.1:35357/v2.0  |
+|      id     | 39d0e31687224addb7d9aa016ca78a6a |
+| internalurl |  http://172.16.200.1:5000/v2.0   |
+|  publicurl  |  http://172.16.200.1:5000/v2.0   |
+|    region   |            regionOne             |
+|  service_id | db381d733fcc428d89cbf67ef6b3c173 |
++-------------+----------------------------------+
+
+
+
+所有服务都会使用keystone实现认证。
+
+# keystone user-create --name admin --pass admin --email admin@magedu.com
++----------+-------------------------------------------------------------------------------------------------------------------------+
+| Property |                                                          Value                                                          |
++----------+-------------------------------------------------------------------------------------------------------------------------+
+|  email   |                                                     admin@magedu.com                                                    |
+| enabled  |                                                           True                                                          |
+|    id    |                                             bd02844e87e549148e1c4bbeaefcc4eb                                            |
+|   name   |                                                          admin                                                          |
+| password | $6$rounds=40000$Tlot13xbxNT9Rtu2$xyf5iwCOHyzV6A9okODwuSZUXkwldaaGoaHwZz6LSP1ZOGtmSOuOY/7b4QXpduzRtVYis0FBPB8wZXvvAdv5b1 |
+| tenantId |                                                                                                                         |
++----------+-------------------------------------------------------------------------------------------------------------------------+
+
+# keystone role-create --name admin
++----------+----------------------------------+
+| Property |              Value               |
++----------+----------------------------------+
+|    id    | 7d6014270eaf4162bf8f41481fffe101 |
+|   name   |              admin               |
++----------+----------------------------------+
+
+# keystone tenant-create --name admin --description "Admin Tenant"
++-------------+----------------------------------+
+|   Property  |              Value               |
++-------------+----------------------------------+
+| description |           Admin Tenant           |
+|   enabled   |               True               |
+|      id     | ca853af6387b419ea7401c1e85237e96 |
+|     name    |              admin               |
++-------------+----------------------------------+
+
+# keystone user-role-add --user-id bd02844e87e549148e1c4bbeaefcc4eb --role-id 7d6014270eaf4162bf8f41481fffe101 --tenant-id ca853af6387b419ea7401c1e85237e96
+
+
+
+
+# vim ~/keystonerc_admin
+
+export OS_USERNAME=admin
+export OS_TENANT_NAME=admin
+export OS_PASSWORD=admin
+export OS_AUTH_URL=http://172.16.200.1:35357/v2.0/
+export PS1='[\u@\h \W(KS_ADMIN)]\$'
+
+
+# unset SERVICE_TOKEN
+# unset SERVICE_ENDPOINT
+# source ~/keystonerc_admin
+# keystone user-list
++----------------------------------+-------+---------+------------------+
+|                id                |  name | enabled |      email       |
++----------------------------------+-------+---------+------------------+
+| bd02844e87e549148e1c4bbeaefcc4eb | admin |   True  | admin@magedu.com |
++----------------------------------+-------+---------+------------------+
+
+执行类似如下显示类的命令，查看新的认证机制是否已经启用。
+# keystone tenant-list
++----------------------------------+-------+---------+
+|                id                |  name | enabled |
++----------------------------------+-------+---------+
+| ca853af6387b419ea7401c1e85237e96 | admin |   True  |
++----------------------------------+-------+---------+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,3046 @@
+﻿
+DNS: 域名解析，BIND: Berkeley Internet Name Domain
+SSL/TLS: http-->https, OpenSSL, CA, Digital Certificate, PKI
+HTTP: HTTP协议，Apache, LAMP, Nginx(Engine X), LNMP(LEMP), MySQL, PHP, varnish
+CDN: DNS(View), varnish
+File Server: NFS、SMB/CIFS、FTP
+Netfilter: iptables (filter, nat, mangle, raw)、tcp wrapper
+NSSwitch: framework, platform, PAM: 
+SMTP/POP3/IMAP4: Mail Server
+SELinux: Security Enhanced Linux
+	C2-->SELinux-->B1
+
+MySQL: 
+
+
+
+DNS: Domain Name Service
+域名：www.magedu.com(主机名，FQDN：Full Qualified Domain Name, 完全限定域名)
+DNS：名称解析，Name Resolving 名称转换（背后有查询过程，数据库）
+	FQDN<-->IP
+	172.16.0.1		www.magedu.com.
+	172.16.0.2		mail.magedu.com.
+	
+nsswitch:
+
+
+hosts: 	files	dns
+file: /etc/hosts
+dns: DNS
+
+stub resolver: 名称解析器	
+
+ping www.magedu.com
+
+hosts: 
+	IPADDR	FQDN	Ailases
+	172.16.0.1	www.magedu.com	www
+	
+	
+	A --> D
+		hosts
+		
+1、周期性任务
+	
+2、Server, Server
+	1KW
+	
+3、分布式数据库
+
+	
+
+
+	
+IANA: IP, FQDN
+	ftp: hosts
+ICANN: 
+
+
+TLD:
+	组织域：.com, .org, .net, .cc
+	国家域: .cn, .tw, .hk, .iq, .ir, .jp
+	反向域: IP-->FQDN
+		反向：IP-->FQDN
+		正向：FQDN-->IP
+
+IP-->FQDN:
+
+FQDN-->IP:
+www.magedu.com.		IP1
+
+查询：
+	递归：只发出一次请求
+	迭代：发出多次请求
+	
+解析：
+	正向：FQDN-->IP
+	反向：IP-->FQDN
+	
+两段式：递归，迭代
+
+DNS：分布式数据库
+	上级仅知道其直接下级；
+	下级只知道根的位置；
+
+DNS服务器：
+	接受本地客户查询请求（递归）
+	外部客户端请求：请求权威答案
+		肯定答案：TTL
+		否定答案：TTL
+	外部客户端请求：非权威答案
+		
+	
+DNS服务器类型
+	主DNS服务器: 数据修改
+	辅助DNS服务器：请求数据同步
+		serial number
+		refresh
+		retry
+		expire
+		nagative answer TTL
+	缓存DNS服务器
+	转发器
+	
+
+
+数据库中的，每一个条目称作一个资源记录(Resource Record, RR)
+资源记录的格式：
+
+TTL 600;
+
+NAME	[TTL]   	IN			RRT		VALUE
+www.magedu.com.		IN			A		1.1.1.1
+
+
+1.1.1.1				IN			PTR		www.magedu.com.
+
+
+资源记录类型：
+SOA(Start Of Authority): 
+	ZONE NAME	TTL		IN		SOA		FQDN	ADMINISTRATOR_MAILBOX (
+						serial number
+						refresh
+						retry
+						expire
+						na ttl )
+	时间单位：M（分钟）、H（小时）、D（天）、W（周），默认单位是秒
+	邮箱格式：admin@magedu.com -写为-> admin.magedu.com
+	
+	magedu.com.		600		IN		SOA		ns1.magedu.com.		admin.magedu.com. (
+						2013040101
+						1H
+						5M
+						1W
+						1D )
+NS(Name Server): ZONE NAME --> FQDN
+	magedu.com.		600		IN		NS		ns1.magedu.com.
+	magedu.com.		600		IN		NS		ns2.magedu.com.
+	ns1.magedu.com.	600		IN		A		1.1.1.2
+	ns2.magedu.com.	600		IN		A		1.1.1.5
+MX(Mail eXchanger): ZONE NAME --> FQDN
+	ZONE NAME	TTL		IN		MX  pri		VALUE
+	优先级：0-99，数字越小级别越高
+		magedu.com.	600		IN		MX	10	mail.magedu.com.
+		mail.magedu.com.	600		IN	A	1.1.1.3
+A（address）：	FQDN-->IPv4	
+AAAA：FQDN-->IPv6
+PTR(pointer)：IP-->FQDN
+CNAME(Canonical NAME): FQDN-->FQDN
+	www2.magedu.com.		IN		CNAME		www.magedu.com.
+TXT
+CHAOS
+SRV
+
+
+
+
+域：Domain
+区域：Zone
+
+
+.com
+magedu.com.		IN		NS		ns.magedu.com.
+ns.magedu.com.	IN		A		192.168.0.10
+
+
+magedu.com.   192.168.0.0/24
+
+www		192.168.0.1
+mail	192.168.0.2, MX
+
+建立两个区域文件：
+正向区域文件
+magedu.com.		IN		SOA	
+
+www.maged.com.	IN	A	192.168.0.1
+简写为：
+www			IN	A	192.168.0.1
+
+	
+反向区域文件：
+0.168.192.in-addr.arpa.		IN	SOA	
+
+1.0.168.192.in-addr.arpa.		IN	PTR		www.magedu.com.
+1		IN		PTR		www.magedu.com.
+
+
+区域传送的类型：
+	完全区域传送: axfr 
+	增量区域传送：ixfr
+	
+区域类型：
+	主区域：master
+	从区域：slave
+	提示区域：hint
+	转发区域：forward
+
+.com.	
+
+magedu.com.
+
+DNS资源记录类型及意义：
+SOA：起始授权记录
+NS：名称服务器
+MX：邮件交换器
+CNAME：别名记录
+A：FQDN-->IPv4
+AAAA: FQDN-->IPv6
+PTR：IP-->FQDN
+
+
+递归：请求一次
+迭代：请求多次，参考答案
+
+
+DNS服务器类型：
+	主
+	辅助
+	缓存
+	转发器
+	
+ZONE DOMAIN
+
+SOA:
+	
+
+mageedu.com		172.16.100.0/24
+
+ns	172.16.100.1
+www	172.16.100.1, 172.16.100.3
+mail	172.16.100.2
+ftp     www
+
+
+
+DNS：BIND
+	Berkeley Internet Name Domain
+	
+	ISC
+	
+bind97：
+	/etc/named.conf
+		BIND进程的工作属性
+		区域的定义
+	/etc/rndc.key
+		rndc: Remote Name Domain Controller
+		密钥文件 
+		配置信息：/etc/rndc.conf
+		
+	/var/named/
+		区域数据文件
+
+	/etc/rc.d/init.d/named
+		{start|stop|restart|status|reload}
+		
+	二进制程序：named
+
+bind-chroot:
+	默认：named
+		用户：named
+		组：named
+		
+	/var/named/chroot/
+		etc/named.conf
+		etc/rdnc.key
+		sbin/named
+		var/named/
+		
+				
+缓存-->主-->从
+
+
+	named-checkconfig
+	name-checkzone
+	
+	
+
+dig: Domain Information Gropher
+
+
+DNS: 
+	监听的协议及端口：
+		53/udp
+		53/tcp
+		953/tcp, rndc
+		
+		
+SOCKET: 套接字
+	IP:PORT
+	
+	C/S： Client/Server
+		172.16.100.1:53
+		
+	192.168.0.13
+		
+		192.168.0.12:53 
+		172.16.100.1:53
+		0.0.0.0:53
+
+区域：
+zone "ZONE NAME" IN {
+	type {master|slave|hint|forward};
+	
+};
+
+主区域：
+	file "区域数据文件";
+	
+从区域：
+	file "区域数据文件";
+	masters { master1_ip; };
+	
+
+
+临时性地关闭SELinux:
+# getenforce
+Enforcing
+
+# setenforce 0
+# setenforce 1
+
+
+永久关闭：
+# vim /etc/selinux/config
+
+
+
+dig -t RT NAME @IP
+
+dig -t NS mageedu.com
+
+dig -x IP: 
+	根据IP查找FQDN
+	
+host -t RT NAME: 查询名称的解析结果
+
+nslookup: 交互式
+nslookup>
+		server IP
+		set q=RT
+		NAME
+		
+
+100.16.172.in-addr.arpa
+
+BIND, named, DNS
+
+named: named.named
+
+resoving:
+	数据文件
+		IP-->FQDN
+		ZONE NAME --> NS, MX
+		
+	查询：stub resolver
+		递归
+	
+	缓存功能：
+	
+DNS RT
+	$TTL 宏
+	$ORIGIN mageedu.com.
+	$GENERATE
+	NAME	[TTL]	IN	RT		VALUE	
+SOA：
+	@	IN	SOA		MASTER_NS_SERVER_FQDN	ADMIN_MAILBOX （
+	
+	）
+NS：
+	@	IN	NS	NS_SERVER_FQDN
+MX:
+	@	IN	MX  pri	MX_SERVER_FQDN
+A
+AAAA
+PTR
+CNAME
+	Alias	IN	CNAME	FQDN
+
+
+named: /usr/sbin/named 
+	SOCKET  IP:PORT
+		tcp
+		udp
+			被打开
+			
+	/etc/named.conf
+
+/etc/rc.d/init.d/functions
+/etc/rc.d/init.d/named   /etc/sysconfig/named
+
+service named start
+
+bind 
+named, named
+
+bind97
+
+dig:
+	aa: Authority Answer
+	
+泛域解析：
+	*.mageedu.com.		IN	A	
+
+axfr: 完全区域传送 
+ixfr：增量区域传送
+
+区域：
+	主、从
+	
+
+rndc: 
+
+正向区域：
+SUB_ZONE_NAME	IN	NS	NSSERVER_SUB_ZONE_NAME
+NSSERVER_SUB_ZONE_NAME	IN	A	IP
+
+
+
+.com
+mageedu.com.		IN		NS		ns1.mageedu.com.
+					IN		NS		ns2.mageedu.com.
+ns1.mageedu.com.	IN		A		172.16.100.1
+ns2.magedu.com.		IN		A		172.16.100.2
+
+
+dig -t A www.baidu.com  @172.16.100.1
+
+.
+
+.com
+
+.com
+magedu.com.
+
+
+
+
+mageedu.com.
+fin.mageedu.com.		IN		NS		ns1.fin.mageedu.com.
+fin.mageedu.com.		IN		NS		ns2.fin.mageedu.com.
+ns1.fin.mageedu.com.	IN		A		172.16.100.8
+ns2.fin.mageedu.com.	IN		A		172.16.100.9
+
+market.mageedu.com.		IN		NS		ns1.market.mageedu.com.
+ns1.market.mageedu.com.	IN		A		172.16.100.108
+
+
+forward {only|first}
+forwarders {};
+
+zone "ZONE_NAME" IN {
+	type forward;
+	
+};
+
+
+
+
+
+
+allow-recursion {};
+allow-query {};
+allow-transfer {};
+	axfr
+	ixfr
+	
+allow-query { 172.16.0.0/16; 127.0.0.0/8; 10.0.0.0/8; }
+
+acl ACL_NAME { 
+	172.16.0.0/16;
+	127.0.0.0/8;
+};
+
+acl innet { 
+	172.16.0.0/16;
+	127.0.0.0/8;
+};
+
+allow-query { innet; };
+	none;
+	any;
+	
+
+	
+
+	
+view VIEW_NAME {
+
+
+
+
+};
+
+view VIEW_NAME {
+
+};
+
+
+
+所有的区域都必须定义在视图中
+zone "." IN 
+
+
+catagory: 日志源
+	查询
+	区域传送
+	
+	可以通过catagory自定义日志来源
+	
+channel: 日志保存位置
+		syslog
+		file: 自定义保存日志信息的文件
+		
+	
+logging {
+
+};
+
+
+queryperf : 压力测试
+
+DHCP: Dynamic Host Configuration Protocol <-- bootp
+
+TCP/IP
+	IPADDR
+	NETMASK
+	GATEWAY
+	DNS
+	
+Client--> DHCPDISCOVER 
+          DHCPOFFER <-- Server
+Client--> DCHPREQUEST 
+		  DCHPACK <-- Server
+		  
+Client--> DHCPREQUEST
+		  DHCPACK <-- Server
+		  
+UDP:
+	67/udp
+	68/udp
+	
+
+
+
+HTTP: HyperText Transfer Protocol: 超文本传输协议
+
+超链接：
+
+Web: 
+	http/0.9: 仅纯文本(超链接)， ASCII，
+	HTML：HyperText Mark Language
+		<h2>Title</h2>
+		
+Browser: 客户端
+
+1.1.1.1： web, a.html
+2.2.2.2: web, a.html
+
+URI: Uniform Resource Indentifier, 全局范围内
+	统一：路径格式上的统一
+	
+URL：Uniform Resource Locator
+
+protocol://HOST:port/path/to/file
+
+http://www.magedu.com/download/linux.tar.gz
+
+web资源：http://www.magedu.com/logo.gif
+	多个资源很可能被整合为一个html文档
+	
+web对象：
+
+HTTP方法：
+	GET
+	
+http/1.0: PUT, POST, DELETE, HEAD
+
+MIME: Multipurpose Internet Mail Extension, 多用途互联网邮件扩展
+
+
+SMTP: Simple Mail Transmission Protocol, 纯文本
+	MIME: 将非文本数据在传输前重新编码为文本格式，接收方能够用相反的方式将其重新还原为原来的格式，还能够调用相应的程序来打开此文件
+	Base64
+	
+协议首部：
+	image/jpeg
+
+动态效果
+Java, Applet, JRE
+
+动态网页：服务器端存储的文档非HTML格式，而是编程语言开发的脚本，脚本接受参数之后在服务器运行一次，运行完成之后会生成HTML格式的文档，把生成的文档发给客户端；
+
+web: index.php
+
+web --> procotol --> php (运行index.php)
+
+http
+
+index.html:
+	引用N个web对象：URL
+	
+动态网页：包含静态内容和动态内容
+	动态内容部分才需运行
+
+
+缓存：
+
+URL：http://www.magedu.com/2.html
+
+
+HTTP报文：请求报文，响应报文
+
+
+请求报文语法：
+<method> <request-URL> <version>
+<headers>
+
+<entity-body> 
+	
+响应报文语法：
+<version> <status> <reason-phrase>
+<headers>
+
+<entity-body>
+
+状态代码:
+1xx: 纯信息
+2xx: “成功”类的信息 (200, 201, 202)
+3xx：重定向类的信息 (301, 302, 304)
+4xx: 客户端错误类的信息 (404)
+5xx：服务器端错误类的信息
+
+
+
+请求报文：
+GET / HTTP/1.1
+Host: www.magedu.com
+Connection: keep-alive
+
+响应报文：
+HTTP/1.1 200 OK
+X-Powered-By: PHP/5.2.17
+Vary: Accept-Encoding,Cookie,User-Agent
+Cache-Control: max-age=3, must-revalidate
+Content-Encoding: gzip
+Content-Length: 6931
+
+
+上面两个报文的第一行通常称作报文“起始行(start line)”；后面的标签格式的内容称作首部域(Header field)，每个首部域都由名称(name)和值(value)组成，中间用逗号分隔。另外，响应报文通常还有一个称作Body的信息主体，即响应给客户端的内容。
+
+
+Web服务器的主要操作
+
+1、	建立连接——接受或拒绝客户端连接请求；
+2、	接收请求——通过网络读取HTTP请求报文；
+3、	处理请求——解析请求报文并做出相应的动作；
+4、	访问资源——访问请求报文中相关的资源；
+5、	构建响应——使用正确的首部生成HTTP响应报文；
+6、	发送响应——向客户端发送生成的响应报文；
+7、	记录日志——当已经完成的HTTP事务记录进日志文件；
+
+5s: 10 image, 3 css, 5html
+18资源
+
+http, tcp: 三次握手，四次断开
+
+http/1.1：
+	增强了缓存的功能
+	长连接
+	
+
+
+www.netcraft.com
+
+
+
+
+
+
+
+
+Web服务器处理并发连接请求的架构方式
+
+1、单线程web服务器(Single-threaded web servers)
+
+此种架构方式中，web服务器一次处理一个请求，结束后读取并处理下一个请求。在某请求处理过程中，其它所有的请求将被忽略，因此，在并发请求较多的场景中将会出现严重的必能问题。
+
+ 
+
+2、多进程/多线程web服务器
+
+此种架构方式中，web服务器生成多个进程或线程并行处理多个用户请求，进程或线程可以按需或事先生成。有的web服务器应用程序为每个用户请求生成一个单独的进程或线程来进行响应，不过，一旦并发请求数量达到成千上万时，多个同时运行的进程或线程将会消耗大量的系统资源。
+
+ 
+
+3、I/O多路复用web服务器
+
+为了能够支持更多的并发用户请求，越来越多的web服务器正在采用多种复用的架构——同步监控所有的连接请求的活动状态，当一个连接的状态发生改变时(如数据准备完毕或发生某错误)，将为其执行一系列特定操作；在操作完成后，此连接将重新变回暂时的稳定态并返回至打开的连接列表中，直到下一次的状态改变。由于其多路复用的特性，进程或线程不会被空闲的连接所占用，因而可以提供高效的工作模式。
+
+ 
+
+4、多路复用多线程web服务器
+
+将多进程和多路复用的功能结合起来形成的web服务器架构，其避免了让一个进程服务于过多的用户请求，并能充分利用多CPU主机所提供的计算能力。
+
+ 
+
+代理
+
+Web代理服务器工作于web客户端和web服务器之间，它负责接收来自于客户端的http请求，并将其转发至对应的服务；而后接收来自于服务端的响应，并将响应报文回送至客户端。
+
+
+
+
+apache: 17,
+
+NCSA, httpd
+
+	A Patchy Server = apache
+
+FSF: GNU, GPL
+ASF: Apache Software Foundation
+	web: httpd
+		 Tomcat
+		 Hadoop
+		 
+	www.apache.org
+	
+web: http://httpd.apache.org
+
+httpd:
+	Web Server, Open Source
+	2.2, 2.4, 2.0, 1.3
+	
+httpd:
+	事先创建进程
+	按需维持适当的进程
+	模块块设计，核心比较小，各种功能都模块添加（包括php）
+		支持运行配置，支持单独编译模块
+	支持多种方式的虚拟主机配置
+		Socket  IP:Port
+		虚拟主机：
+			基于IP的虚拟主机；
+			基于端口的虚拟主机；
+			基于域名的虚拟主机；
+		
+protocol://HOST:PORT/path/to/source
+		
+			Method URL version
+			header
+			
+			body
+
+
+			GET /download/linux.tar.bz2 HTTP/1.0
+			Host: www.magedu.com
+	支持https协议 (mod_ssl)
+	支持用户认证
+	支持基于IP或主机名的ACL
+	支持每目录的访问控制
+	支持URL重写，/image/a.jpeg, /bbs/images/abc.jpeg
+	
+
+RedHat(httpd):
+	rpm包：
+	源码编译
+	
+httpd: SELinux(事先让其处于permssive, disabled)
+
+httpd:
+	/usr/sbin/httpd(MPM: prefork)
+		httpd: root, root (master process)
+		httpd: apche, apache (worker process)
+	/etc/rc.d/init.d/httpd
+	Port: (80/tcp), (ssl: 443/tcp)
+	/etc/httpd: 工作根目录，相当于程序安装目录
+	/etc/httpd/conf: 配置文件目录
+		主配置文件：httpd.conf
+		/etc/httpd/conf.d/*.conf
+	/etc/httpd/modules: 模块目录
+	/etc/httpd/logs --> /var/log/httpd: 日志目录
+		日志文件有两类：访问日志access_log，错误日志：err_log
+	/var/www/
+		html
+		cgi-bin
+		
+		cgi: Common Gateway Interface
+			Client --> httpd (index.cgi) --> Spawn Process (index.cgi) --> httpd --> Client
+			perl, python, java, (Servlet, JSP), php
+			
+		fastcgi: 
+		
+		程序：指令和数据
+			数据，数据库服务
+			
+httpd:
+	directive value
+	指令不区分字符大小写
+	value则根据需要有可能要区分
+	
+
+
+MPM: Multi Path Modules
+	mpm_winnt
+	prefork (一个请求用一个进程响应)
+	worker  (一个请求用一个线程响应, (启动多个进程，每个进程生成多个线程))
+	event   (一个进程处理多个请求)
+
+
+URL路径跟本地文件系统路径不是一码事儿， URL是相对于DocumentRoot的路径而言的。
+
+Options
+	None: 不支持任何选项
+	Indexes: 允许索引目录
+	FollowSynLinks: 允许访问符号链接指向的原文件
+	Includes: 允许执行服务端包含（SSI）
+	ExecCGI: 允许运行CGI脚本
+	All: 支持所有选项
+	
+Order：用于定义基于主机的访问功能的，IP，网络地址或主机定义访问控制机制
+	Order allow,deny
+	allow from
+	deny from
+	
+192.168.0.0/24
+
+地址的表示方式：
+	IP
+	network/netmask
+	HOSTNAME: www.a.com
+	DOMAINNAME: magedu.com
+	Partial IP: 172.16, 172.16.0.0/16
+
+Order deny,allow
+Deny from 192.168.0.0/24
+
+	192.168.0.1, 172.16.100.177
+
+elinks http://172.16.100.1
+	-dump
+	-source
+
+
+
+AuthType Basic
+AuthName "Restricted Files"
+AuthUserFile /usr/local/apache/passwd/passwords
+Require user marion
+
+
+Group File Syntax:
+GroupName: rbowen dpitts sungo rshersey
+
+
+AuthType Basic
+AuthName "By Invitation Only"
+# Optional line:
+AuthBasicProvider file
+AuthUserFile /usr/local/apache/passwd/passwords
+AuthGroupFile /usr/local/apache/passwd/groups
+Require group GroupName
+
+
+Require valid-user
+
+
+
+<Directory /www/docs/private>
+AuthName "Private"
+AuthType Basic
+AuthBasicProvider dbm
+AuthDBMUserFile /www/passwords/passwd.dbm
+Require valid-user
+</Directory>
+
+
+
+tom
+http://172.16.100.1/~tom/
+
+
+PV: Page View，每天的页面访问量
+UV: User View, 每天的独立IP访问量
+
+
+/web/html
+
+/www/forum bbs
+
+http://172.16.100.1/bbs/images/logo.jpeg
+
+定义网站文档目录
+访问选项:options
+基于主机的访问控制
+基于用户或组的访问控制
+用户个人站点
+错误日志
+日志格式
+访问日志 PV UV
+路径别名
+CGI
+虚拟主机
+
+
+Apache的指令：
+Listen [IP:]PORT
+MPM: MultiPath Modules
+	prefork: 一个请求用一个进程处理，稳定性好、大并发场景下消耗资源较多；
+	worker：每个请求用一个线程处理(启动一定数量的进程，每个进程生成一定数量的线程)
+	event：每个进程处理多个请求，基于事件来实现 （apache 2.2测试）
+	mpm_winnt
+	
+httpd, httpd.worker, httpd.event
+
+/etc/sysconfig/httpd
+
+
+prework
+<IfModule prefork.c>
+	StartServers
+	MinSpareServers
+	MaxSpareServers
+	MaxClients
+	ServerLimit
+	MaxRequestsPerChild
+</IfModule>
+	
+
+ErrorLog
+LogLevel
+
+LogFormat
+	combined
+	common
+CustomLog
+
+路径别名：
+Alias /URL "local_path"
+
+User
+Group
+
+
+CGI: Common Gateway Interface, 通用网关接口，协议
+
+网页内容：动态内容，静态内容
+静态内容：
+	.jpeg
+	.gif
+	.png
+	.html
+	.css
+动态内容：
+	编程语言写好程序-->执行一次，生成处理结果，经过html格式化后的文本
+	
+echo "<h1>Hellow world</h1>"
+
+
+
+
+
+
+
+
+
+
+
+
+加密/解密，证书原理，制作, 脚本完成自动化证书制作
+
+SSH和OpenSSH, vsftpd
+
+DNS & BIND (CDN)
+
+Web(http协议，httpd(LAMP), nginx(LNMP), squid)
+
+iptables (firewall) layer7
+
+postfix ()
+
+NFS, samba
+
+SELinux
+
+TCP/IP: 安全
+
+	A--》B
+		机密性：明文传输(ftp, http, smtp, telnet)
+		完整性：10 （100）
+		身份验正：
+		
+机密性：plaintext --> 转换规则 -->  ciphertext
+		ciphertext --> 转换规则 --> plaintext
+		
+	转换算法：密钥
+	
+	对称加密：算法
+	
+数据完整性：A-->B
+Eve
+单向加密算法：提取数据特征码
+	输入一样：输出必然相同
+	雪崩效应：输入的微小改变，将会引起结果的巨大改变
+	定长输出：无论原始数据是多在，结果大小都是相同的
+	不可逆：无法根据特征码还原原来的数据
+
+A: plaintext:footprint --> B 
+
+E: plaintext2:footprint2 --> B
+
+A: plaintext:(footprint) --> B
+
+协商生成密码：密钥交换（Internet Key Exchange, IKE）
+
+Diffie-Hellman协议:
+
+A --> B
+	p, g (大素数，生成数)
+	
+A: x
+B: y
+
+A: g^x%p --> B
+B: g^y%p --> A
+
+g, p, g^x%p, g^y%p
+
+
+A: (g^y%p)^x=g^yx%p
+B: (g^x%p)^y=g^xy%p
+
+密钥交换算法
+
+g=2
+p=7
+x=2
+y=3
+
+
+公钥加密算法：非对称加密算法
+	密钥对：
+		公钥：p
+		私钥：s
+		
+	发送方用自己的私钥加密数据，可以实现身份验正
+	发送方用对方的公钥加密数据，可以保证数据机密性
+	
+	公钥加密算法很少用来加密数据：速度太慢
+		
+
+
+PKI: Public Key Infrastructure
+	CA: Certificate Authority
+	
+x509, pkcs12
+
+x509:
+	公钥及期有效期限
+	证书的合法拥有者
+	证书该如何被使用
+	CA的信息
+	CA签名的校验码
+	
+PKI: TLS/SSL：x509
+
+PKI: OpenGPG
+
+
+TLS/SSL Handshake
+
+对称加密：
+	DES：Data Encrption Standard, 56bit
+	3DES：
+	AES：Advanced
+		AES192, AES256, AES512
+	Blowfish
+	
+openssl
+gpg
+	
+单向加密：
+	MD4
+	MD5
+	SHA1
+	SHA192, SHA256, SHA384
+	CRC-32
+	
+公钥加密：（加密/签名）
+	身份认证（数字签名）
+	数据加密
+	密钥交换
+	
+	RSA: 加密、签名
+	DSA：签名
+	ElGamal
+
+
+OpenSSL: SSL的开源实现
+	libcrypto: 加密库
+	libssl: TLS/SSL的实现
+		基于会话的、实现了身份认证、数据机密性和会话完整性的TLS/SSL库、
+	openssl: 多用途命令行工具
+		实现私有证书颁发机构
+		
+		子命令：
+			
+openssl实现私有CA：
+1、生成一对密钥
+2、生成自签署证书
+
+openssl genrsa -out /PATH/TO/KEYFILENAME NUMBITS 
+openssl rsa -in /PATH/TO/KEYFILENAME -pubout
+
+
+CA服务器：
+1、vim /etc/pki/tls/openssl.cnf
+dir=/etc/pki/CA
+
+2、cd /etc/pki/CA
+# make certs newcerts crl
+# touch index.txt
+# echo 01 > serial
+
+3、自签证书
+# (umask 077; openssl genrsa -out private/cakey.pem 2048)
+# openssl req -x509 -new -key private/cakey.pem -out cacert.pem -days 3650
+
+证书申请方：
+1、为某服务生成密钥：
+# cd /etc/vsfptd/
+# mkdir ssl
+# cd ssl
+# (umask 077; openssl genrsa 1024 > vsftpd.key)
+# openssl req -new -key vsftpd.key -out vsftpd.csr
+
+2、将此请求通过某方式传递给CA服务器
+
+3、CA签署证书(在CA服务器上操作)
+# openssl ca -in vsftpd.csr -out vsftpd.crt -days N
+	
+
+
+OpenSSL: 
+
+1、创建CA
+	自己生成一对密钥；
+	生成自签证书；
+	
+2、客户端
+	生成一对密钥；
+	生成证书颁发请求, .csr；
+	将请求发给CA；
+	
+3、CA端
+	签署此证书；
+	传送给客户端；
+
+
+OpenSSL: TLS/SSL, (libcryto, libssl, openssl), TLS PKI
+
+OpenSSH:
+
+telnet, TCP/23， 远程登录
+	认证明文
+	数据传输明文
+	
+ssh: Secure SHell, TCP/22
+
+C/S
+
+ssh --> SSH
+
+OpenSSH(开源)
+
+ssh v1, v2
+
+客户端：
+	Linux: ssh
+	Windows: putty, SecureCRT(), SSHSecureShellClient, Xmanager
+
+服务器端：
+	sshd
+	
+openssh (ssh, sshd)
+
+
+ssh --> telnet
+
+sshd:  主机密钥
+
+netstat
+	-r
+	-n
+	-t: tcp connections
+	-u: udp connections
+	-l: listening
+	-p: process
+
+
+	
+ssh (ssh_config)
+sshd (sshd_config)
+
+/etc/ssh
+
+
+ssh:
+	ssh -l USERNAME REMOTE_HOST ['command']
+	ssh USERNAME@REMOTE_HOST
+	
+	-p port
+
+	-X
+	-Y
+	
+基于密钥的认证:
+
+一台主机为客户端（基于某个用户实现）：
+1、生成一对密钥
+ssh-keygen 
+	-t {rsa|dsa}
+	-f /path/to/keyfile
+	-N 'password'
+
+2、将公钥传输至服务器端某用户的家目录下的.ssh/authorized_keys文件中
+使用文件传输工具传输(ssh-copy-id, scp)
+ssh-copy-id -i /path/to/pubkey USERNAME@REMOTE_HOST
+
+3、测试登录
+
+
+
+scp: 基于ssh的远程复制命令，可以实现在主机之间传输数据
+scp [options] SRC DEST
+	-r
+	-p
+	-a
+
+REMOTE_MACHINE
+	USERNAME@HOSTNAME:/path/to/somefile
+
+
+
+
+总结：
+1、密码应该经常换且足够复杂；
+2、使用非默认端口；
+3、限制登录客户地址；
+4、禁止管理直接登录；
+5、仅允许有限制用户登录；
+6、使用基于密钥的认证；
+7、禁止使用版本1
+
+
+
+嵌入式系统专用的ssh软件 dropbear
+
+
+PKI
+
+A --> B：
+证书：(主机，用户)
+	用户信息，公钥
+	颁发者的信息，签名
+	证书有效期限
+
+A发送方：
+1、计算数据的特征码(单向加密)；
+2、用自己的私钥加密特征码，并附加在数据后面；
+3、生成一个临时对称密钥；
+4、用此密钥结合某算法加密数据及加密后的特征码；
+5、对接收方的公钥加密此对称密钥，并附加加密后的数据后面；
+6、发送至接收方；
+
+B接收方：
+1、用自己的私钥解密加密的对称密钥；
+2、用对称密钥解密数据；
+3、用对方的公钥解密加密的特征码；
+4、用同样的算法计算数据的特征码，并与解密而来的特征码进行比较；
+
+
+A --> B:
+
+openssl
+	libcrypto
+	libssl
+	openssl
+	
+SSL: Secure Socket Layer, SSLv2, SSLv3
+TLS：Transport Layer Security, TLSv1
+
+SSL: 
+
+S --> C
+
+C --> S: SSL会话；
+C <--> S: 协商
+S --> C：发送证书至客户端
+C: 
+C --> S：
+S --> C
+
+
+
+OpenSSH, dropbear:
+
+SSH: Secure SHell
+
+C/S:
+	sshd
+	ssh
+	
+	Windows: putty, SecureCRT, Xmanager
+	
+sshd: /etc/ssh/sshd_config
+ssh: /etc/ssh/ssh_config
+主机密钥：
+	v2:
+		RSA
+		DSA
+		
+SSH：
+	基于口令
+	基于密钥
+	
+dropbear：ssh组件
+
+./configure
+make
+make install
+
+
+#!/bin/bash
+# chkconfig: 2345 50 49
+# description: dropbear ssh service
+# Author: 
+
+RSAKEY=/etc/dropbear/dropbear_rsa_host_key
+DSSKEY=/etc/dropbear/dropbear_dss_host_key
+DORPBEAR=/usr/local/sbin/dropbear
+DROPBEARKEY=/usr/local/bin/dropbearkey
+PORT=22
+ADDRESS=0.0.0.0
+LOCKFILE=/var/lock/subsys/dropbear
+PIDFILE=/var/run/dropbear.pid
+
+creatersakey() {
+	if [ ! -f $RSAKEY ]; then
+       $DROPBEARKEY -t rsa -s 2048 -f $RSAKEY
+    fi
+}
+
+createdsskey() {
+	if [ ! -f $DSSKEY ]; then
+	   $DROPBEARKEY -t dss -f $DSSKEY
+	fi
+}
+
+start() {
+	creatersakey;
+	createdsskey;
+	
+	if [ ! -f $LOCKFILE ]; then
+	  $DROPBEAR -p $ADDRESS:$PORT
+	  RETVAL=$?
+	fi
+	
+	if [ $RETVAL -eq 0 ]; then
+	  touch $LOCKFILE
+	  echo "Strat dropbear ............................[ OK ]"
+	fi
+}
+
+stop() {
+	if [ -f $LOCKFILE ]; then 
+	  killall dropbear
+	  RETVAL=$?
+	fi
+	
+	if [ $RETVAL -eq 0 ]; then
+	  rm -f $LOCKFILE $PIDFILE
+	  echo "Stop dropbear ...........................[ OK ]"
+	else
+	  echo "Stop dropbear .......................[ failed ]"
+	fi
+}
+
+status() {
+	if [ -f $LOCKFILE ];then
+	  echo "dropbear is running..."
+	else
+	  echo "dropbear is stopped..."
+	fi
+}
+
+case $1 in
+start)
+	start ;;
+stop)
+	stop ;;
+restart)
+	stop
+	sleep 1
+	start ;;
+status)
+	status ;;
+*)
+	echo "Usage: dropbear {start|stop|restart|staus}"
+	exit 1
+	;;
+esac
+
+
+
+OpenSSL:
+	
+PKI: 
+	CA
+	
+VPN: 
+
+
+
+建立连接
+接收请求
+处理请求
+访问资源
+构建响应
+发送响应
+记录日志
+
+Web日志：
+	错误日志
+		ErrorLog
+	访问日志
+		CustomLog
+
+
+/etc/httpd/conf/httpd.conf
+/etc/httpd/conf.d/*.conf
+
+DocumentRoot
+
+Listen IP:port
+
+Listen 80
+Listen 8080
+
+Listen 172.16.100.1:80
+
+/etc/init.d/httpd --> /etc/sysconfig/httpd
+
+
+MPM: 
+	apache 2.2 
+		prefork
+		worker
+	apache 2.4：
+		mpm可以做为动态模块使用
+
+
+
+KeepAlive
+KeepAliveTimeout
+
+APACHE的认证：
+	基于IP
+		Order allow,deny
+		Allow from 1.1.1.1	
+		Allow
+		Deny
+	基于用户
+		基本认证
+		摘要认证
+
+虚拟主机
+HTTPS
+PHP+MySQL
+
+
+apache虚拟主机:
+
+apache: 服务器，Host, 物理主机
+
+
+虚拟主机：
+apache服务：
+	服务于多个不同的站点：
+	
+apache：
+	中心主机
+	虚拟主机
+		基于IP
+			IP1:80
+			IP2:80
+		基于端口
+			IP:80
+			IP:8080
+		基于域名
+			IP:80
+				主机名不同
+					www.magedu.com
+					www.a.org
+					www2.a.org
+					www.b.net
+
+apache 2.2
+NameVirtualHost 
+
+apache 2.4
+
+ServerName
+ServerAlias
+DocumentRoot /www/a.org/ 
+<Directory "/www/a.org">
+	Option
+	AllowOverride
+	
+</Directory>
+Alias
+ErrorLog
+CustomLog
+
+<Location "/images">
+
+</Location>
+ScriptAlias 
+
+
+
+/www/test/
+www.a.org/images/
+
+
+
+CGI: Common Gateway Interface
+
+
+得先取消中心主机，注释中心主机的DocumentRoot即可。
+虚拟主机的定义：
+<VirtualHost HOST>
+
+</VirtualHost>
+
+基于IP，HOST的写法
+HOST
+	IP1:80
+	IP2:80
+	
+基于端口：
+HOST	
+	IP：80
+	IP：8080
+	
+基于域名：
+	*:80
+ServerName 不同
+
+
+d.gov
+
+172.16.100.177
+
+
+设定默认虚拟主机
+<VirtualHost _default_:80>
+DocumentRoot /www/default80
+# ...
+</VirtualHost>
+
+<VirtualHost _default_:*>
+DocumentRoot /www/default
+# ...
+</VirtualHost>
+
+
+
+
+
+
+
+
+
+
+
+<Location /status>
+	SetHandler server-status
+	Order Deny,Allow
+	Deny from all
+	Allow from .foo.com
+</Location>
+
+博客作业：
+	http的路径别名、虚拟主机、用户认证、SSL的实现过程。
+	
+练习：
+建立httpd服务器(基于编译的方式进行)，要求：
+	1)提供两个基于名称的虚拟主机:
+		(a)www1.magedu.com，页面文件目录为/web/vhosts/www1；错误日志为/var/log/httpd/www1.err，访问日志为/var/log/httpd/www1.access；
+		(b)www2.magedu.com，页面文件目录为/web/vhosts/www2；错误日志为/var/log/httpd/www2.err，访问日志为/var/log/httpd/www2.access；
+		(c)为两个虚拟主机建立各自的主页文件index.html，内容分别为其对应的主机名；
+		(d)通过www1.magedu.com/status输出httpd工作状态相关信息，且只允许提供帐号密码才能访问(status:status)；
+	2)www1主机仅允许172.16.0.0/16网络中的客户机访问；www2主机可以被所有主机访问；
+
+
+为上题中的第2个虚拟主机提供https服务，使得用户可以通过https安全的访问此web站点；
+	(1)要求使用证书认证，证书中要求使用的国家(CN)、州(Henan)、城市(Zhengzhou)和组织(MageEdu)；
+	(2)设置部门为TECH，主机名为www2.magedu.com，邮件为admin@magedu.com；
+	(3)此服务禁止来自于192.168.1.0/24网络中的主机访问；
+
+
+	
+虚拟主机：
+	IP，PORT, HOSTNAME
+	
+<VirtualHost HOST>
+
+</VirtualHost>
+
+NameVirtualHost
+
+
+	
+	
+	
+PHP is Hypertext Preprocessor
+超文本预处理器
+
+
+bash: 
+词法分析
+语法分析
+生成执行路径	
+	
+	
+opcode: 操作码
+
+php解释型，php
+
+php
+php source code --> 编译成二进制 --> 执行二进制格式
+
+Zend : opcode
+
+
+	
+	
+
+关于PHP
+
+一、PHP简介
+	
+PHP是通用服务器端脚本编程语言，其主要用于web开发以实现动态web页面，它也是最早实现将脚本嵌入HTML源码文档中的服务器端脚本语言之一。同时，php还提供了一个命令行接口，因此，其也可以在大多数系统上作为一个独立的shell来使用。
+
+Rasmus Lerdorf于1994年开始开发PHP，它是初是一组被Rasmus Lerdorf称作“Personal Home Page Tool” 的Perl脚本， 这些脚本可以用于显示作者的简历并记录用户对其网站的访问。后来，Rasmus Lerdorf使用C语言将这些Perl脚本重写为CGI程序，还为其增加了运行Web forms的能力以及与数据库交互的特性，并将其重命名为“Personal Home Page/Forms Interpreter”或“PHP/FI”。此时，PHP/FI已经可以用于开发简单的动态web程序了，这即是PHP 1.0。1995年6月，Rasmus Lerdorf把它的PHP发布于comp.infosystems.www.authoring.cgi Usenet讨论组，从此PHP开始走进人们的视野。1997年，其2.0版本发布。
+
+1997年，两名以色列程序员Zeev Suraski和Andi Gutmans重写的PHP的分析器(parser)成为PHP发展到3.0的基础，而且从此将PHP重命名为PHP: Hypertext Preprocessor。此后，这两名程序员开始重写整个PHP核心，并于1999年发布了Zend Engine 1.0，这也意味着PHP 4.0的诞生。2004年7月，Zend Engine 2.0发布，由此也将PHP带入了PHP5时代。PHP5包含了许多重要的新特性，如增强的面向对象编程的支持、支持PDO(PHP Data Objects)扩展机制以及一系列对PHP性能的改进。
+
+二、PHP Zend Engine
+
+Zend Engine是开源的、PHP脚本语言的解释器，它最早是由以色列理工学院(Technion)的学生Andi Gutmans和Zeev Suraski所开发，Zend也正是此二人名字的合称。后来两人联合创立了Zend Technologies公司。
+
+Zend Engine 1.0于1999年随PHP 4发布，由C语言开发且经过高度优化，并能够做为PHP的后端模块使用。Zend Engine为PHP提供了内存和资源管理的功能以及其它的一些标准服务，其高性能、可靠性和可扩展性在促进PHP成为一种流行的语言方面发挥了重要作用。
+
+Zend Engine的出现将PHP代码的处理过程分成了两个阶段：首先是分析PHP代码并将其转换为称作Zend opcode的二进制格式(类似Java的字节码)，并将其存储于内存中；第二阶段是使用Zend Engine去执行这些转换后的Opcode。
+
+三、PHP的Opcode
+
+Opcode是一种PHP脚本编译后的中间语言，就像Java的ByteCode,或者.NET的MSL。PHP执行PHP脚本代码一般会经过如下4个步骤(确切的来说，应该是PHP的语言引擎Zend)：
+1、Scanning(Lexing) —— 将PHP代码转换为语言片段(Tokens)
+2、Parsing —— 将Tokens转换成简单而有意义的表达式
+3、Compilation —— 将表达式编译成Opocdes
+4、Execution —— 顺次执行Opcodes，每次一条，从而实现PHP脚本的功能
+
+四、php的加速器
+
+基于PHP的特殊扩展机制如opcode缓存扩展也可以将opcode缓存于php的共享内存中，从而可以让同一段代码的后续重复执行时跳过编译阶段以提高性能。由此也可以看出，这些加速器并非真正提高了opcode的运行速度，而仅是通过分析opcode后并将它们重新排列以达到快速执行的目的。
+
+常见的php加速器有：
+
+1、APC (Alternative PHP Cache)
+遵循PHP License的开源框架，PHP opcode缓存加速器，目前的版本不适用于PHP 5.4。项目地址，http://pecl.php.net/package/APC。
+
+2、eAccelerator
+源于Turck MMCache，早期的版本包含了一个PHP encoder和PHP loader，目前encoder已经不在支持。项目地址， http://eaccelerator.net/。
+
+3、XCache
+快速而且稳定的PHP opcode缓存，经过严格测试且被大量用于生产环境。项目地址，http://xcache.lighttpd.net/
+
+4、Zend Optimizer和Zend Guard Loader
+Zend Optimizer并非一个opcode加速器，它是由Zend Technologies为PHP5.2及以前的版本提供的一个免费、闭源的PHP扩展，其能够运行由Zend Guard生成的加密的PHP代码或模糊代码。 而Zend Guard Loader则是专为PHP5.3提供的类似于Zend Optimizer功能的扩展。项目地址，http://www.zend.com/en/products/guard/runtime-decoders
+
+5、NuSphere PhpExpress
+NuSphere的一款开源PHP加速器，它支持装载通过NuSphere PHP Encoder编码的PHP程序文件，并能够实现对常规PHP文件的执行加速。项目地址，http://www.nusphere.com/products/phpexpress.htm
+
+五、PHP源码目录结构
+
+PHP的源码在结构上非常清晰。其代码根目录中主要包含了一些说明文件以及设计方案，并提供了如下子目录：
+
+1、build —— 顾名思义，这里主要放置一些跟源码编译相关的文件，比如开始构建之前的buildconf脚本及一些检查环境的脚本等。
+2、ext —— 官方的扩展目录，包括了绝大多数PHP的函数的定义和实现，如array系列，pdo系列，spl系列等函数的实现。 个人开发的扩展在测试时也可以放到这个目录，以方便测试等。
+3、main —— 这里存放的就是PHP最为核心的文件了，是实现PHP的基础设施，这里和Zend引擎不一样，Zend引擎主要实现语言最核心的语言运行环境。
+4、Zend —— Zend引擎的实现目录，比如脚本的词法语法解析，opcode的执行以及扩展机制的实现等等。
+5、pear —— PHP 扩展与应用仓库，包含PEAR的核心文件。
+6、sapi —— 包含了各种服务器抽象层的代码，例如apache的mod_php，cgi，fastcgi以及fpm等等接口。
+7、TSRM —— PHP的线程安全是构建在TSRM库之上的，PHP实现中常见的*G宏通常是对TSRM的封装，TSRM(Thread Safe Resource Manager)线程安全资源管理器。
+8、tests —— PHP的测试脚本集合，包含PHP各项功能的测试文件。
+9、win32 —— 这个目录主要包括Windows平台相关的一些实现，比如sokcet的实现在Windows下和*Nix平台就不太一样，同时也包括了Windows下编译PHP相关的脚本。
+
+
+HTML
+
+<html>
+	<head>
+		<title></title>
+	</head>
+	<body>
+		
+	</body>
+</html>
+
+
+test.sh
+#!/bin/bash
+date
+
+
+嵌入式web开发语言
+
+index.php
+
+<html>
+	<head></head>
+
+<php
+
+php>
+
+</html>
+
+
+
+apache+php
+	CGI
+	Module
+	FastCGI
+	
+Nginx+fpm
+
+
+
+
+[abc]
+fdsafds
+
+
+[fdaf]
+fd
+
+
+
+
+
+RDBMS:
+1、数据库创建、删除除
+2、创建表、删除表、修改表
+3、索引的创建、删除
+4、用户和权限
+5、数据增、删、改
+6、查询
+
+
+DML：Data Manapulate Language: 数据操作语言
+	INSERT, REPLACE, UPDATE, DELETE
+DDL：Data Defination Lanuage: 数据定义语言
+	CREATE, ALTER, DROP
+DCL：Data Control Language: 数据控制语言
+	GRANT, REVOKE
+	
+SELECT
+
+
+RDBMS: egreSQL
+	Oracle, Sybase, Infomix, SQL Server, DB2
+	MySQL, PostgreSQL, pgsql, EnterpriseDB
+	
+	MySQL, SQL, MySQL AB
+		去IOE： IBM， Oralce, EMC
+
+
+Oracle, 
+
+IBM, 
+SUN-->MySQL
+
+BEA: WebLogic
+PepoleSoft
+
+OpenOffice
+
+LibreOffice
+
+MariaDB
+
+MySQL 
+
+
+--> Percona
+
+反关系模型：NoSQL
+	MongoDB
+	Redis
+	HBase
+
+
+
+DBMS：
+	数据管理独立性；
+	有效地完成数据存取；
+	数据完整性和安全性；
+	数据集中管理；
+	并发存储与故障恢复；
+	减少应用程序开发时间；
+	
+
+SQL: ANSI
+sql86, sql89, sql92, sql99
+
+DDL, DML, DCL
+
+
+MySQL: 
+	Community Edtion
+	Enterprise Edtion
+
+软件包格式：
+	软件包管理器特有的格式
+		rpm包，.exe格式等
+	通用二进制格式
+	源程序
+
+
+
+RHEL 5.8 （32bit）
+	mysql, mysql-server
+	
+MySQL的RPM包
+
+LAMP:
+	MySQL
+	通用二进制
+	
+	
+mysql, mysql-server
+
+二进制程序
+mysql
+	-u USERNAME
+	-p
+	-h MYSER_SERVER
+	
+	-h 127.0.0.1
+		Linux: socket
+		Windows: memory
+		
+mysql客户端：
+	交互式模式
+	批处理模式
+		执行mysql脚本
+
+		
+交互式模式中的命令类别：
+	客户端命令
+	服务器端命令
+		都必须使用语句结束符，默认为分号;
+		
+
+		
+		
+SQL接口：
+	Oracle, PL/SQL
+	SQL Server, T-SQL
+	
+
+	
+用户：USERNAME@HOST
+	
+mysqld
+
+tcp/3306, mysql, mysql
+
+RDBMS: 
+	/var/lib/mysql/
+	
+初始化：
+	
+
+关系数据库对象：
+	库
+	表
+	索引
+	视图
+	约束
+	存储过程
+	存储函数
+	触发器
+	游标
+	用户
+
+
+	权限
+	事务
+	
+表：
+	行，列
+	表：实体
+		行: row
+		列：field, column
+
+字段名称，数据类型，类型修饰（限制）
+	字符
+		CHAR(n)
+		VARCHAR(n)
+		BINARY(n)
+		VARBINARY(n)
+		TEXT(n)
+		BLOB(n)
+	数值
+		精确数值
+			整型
+				TINYINT
+				SMALLINT
+				MEDIUMINT
+				INT
+				BIGINT
+				
+				修饰符：UNSIGNED，无符号
+						NOT NULL
+			十进制
+				DECIMAL
+		近似数值
+			浮点型
+				FLOAT
+				DOUBLE
+	日期时间
+		DATE
+		TIME
+		DATETIME
+		STAMP
+	布尔
+	内置：ENUM， SET
+
+
+DDL
+	CREATE
+	ALTER
+	DROP
+DML
+	INSERT
+	UPDATE
+	DELETE
+DCL
+	GRANT
+	REVOKE
+	
+创建数据库
+	CREATE DATABASE db_name; 
+	CREATE DATABASE [IF NOT EXISTS] db_name;
+	
+	DROP DATABASE [IF EXISTS] db_name;
+	
+创建表
+	CREATE TABLE tb_name(col1,col2,...);
+	
+	查看库中的表：SHOW TABLES FROM db_name；
+	查看表的结构：DESC tb_name;
+
+	删除表：DROP TABLE tb_name；
+	
+修改表：
+	ALTER TABLE tb_name 
+		MODIFY
+		CHANGE
+		ADD
+		DROP
+
+DML:
+	INSERT INTO tb_name (col1,col2,...) VALUES|VALUE ('STRING', NUM,...);
+	INSERT INTO tb_name (col1,col2,...) VALUES|VALUE ('STRING', NUM,...),('STRING',NUM,...);	
+	
+	UPDATE tb_name SET column=value WHERE  
+		
+	DELETE FROM tb_name WHERE CONDITION;
+
+选择：
+	SELECT 字段 FROM tb_name WHERE CONDITION
+	
+	*: 所有字段
+	WHERE：没有条件表示显示所有行；
+
+创建用户：
+	CREATE USER 'USERNAME'@'HOST' [IDENTIFIED BY 'PASSWORD'];
+	DROP USER 'USERNAME'@'HOST';
+	
+	HOST:
+		IP：
+		HOSTNAME:
+		NETWORK：
+		通配符
+			_:匹配任意单个字符， 172.16.0._
+			%:匹配任意字符；
+			
+	jerry@'%'
+DCL:
+	GRANT pri1,pri2,... ON DB_NAME.TB_NAME TO 'USERNAME'@'HOST' [IDENTIFIED BY 'PASSWORD'];
+	REVOKE pri1,pri2,... ON DB_NAME.TB_NAME FROM 'USERNAME'@'HOST';
+	
+	查看用户的授权：SHOW GRANTS FOR 'USERNAME'@'HOST';
+	
+	ALL PRIVILEGES
+	
+	
+	
+
+
+
+选择和投影
+
+
+MySQL基础操作练习(所属的库叫做testdb)：
+
+新建如下表（包括结构和内容）：
+
+ID    Name          Age     Gender     Course
+1     Ling Huchong   24      Male       Hamogong
+2     Huang Rong    19      Female     Chilian Shenzhang
+3     Lu Wushaung   18      Female     Jiuyang Shenggong
+4     Zhu Ziliu     52      Male       Pixie Jianfa
+5     Chen Jialuo   22      Male       Xianglong Shiba Zhang
+
+	
+2、完成如下操作
+	(1)找出性别为女性的所有人；
+	(2)找出年龄大于20的所有人；
+	(3)修改Zhu Ziliu的Course为Kuihua Baodian; 
+	(4)删除年龄小于等于19岁的所有人；
+	(5)创建此表及所属的库；	
+	(6)授权给testuser对testdb库有所有访问权限；
+	
+
+mysql> FLUSH PRIVILEGES;
+
+为用户设定密码：
+1、mysql>SET PASSWORD FOR 'USERNAME'@'HOST'=PASSWORD('password');	
+	
+2、# mysqladmin	-uUSERNAME -hHOST -p password 'password'
+	
+3、mysql> UPDATE user SET Password=PASSWORD('password')	WHERE USER='root' AND Host='127.0.0.1';
+
+	
+AND
+OR
+NOT
+	
+图形客户端：
+1、phpMyAdmin
+2、Workbench
+3、MySQL Front
+4、Navicat for MySQL
+5、Toad
+
+
+单层结构
+二层结构
+三层结构
+
+练习：
+apache2.2 + php53 + mysql平台
+1、创建7个基于域名的虚拟主机；分别用于安装phpwind、discuz、phpbb、drupal、joomla、wordpress和phpMyAdmin；
+2、设定phpMyAdmin仅使用https，不允许通过http访问；
+	
+	
+DDL,DML,DCL
+
+库、表、索引、视图、存储过程、存储函数、触发器、用户、游标、约束（键，码）、事件调度器(Event Scheduler)
+事务、权限
+
+DDL:
+	CREATE
+	ALTER
+	DROP
+	
+DML: 
+	INSERT INTO
+	UPDATE 
+	DELETE
+	
+SELECT
+
+DCL:
+	GRANT
+	REVOKE
+	
+Field: Col_Name Col_Defination
+	数据类型 修饰符
+	
+User CHAR(20) NOT NULL,
+	UNSIGNED：无符号, 8bit: 0-255, -128 127
+	
+数据类型：
+	字符型
+		定长：
+			CHAR()
+			BINARY()
+		变长
+			VARCHAR()
+			VARBINARY()
+	数值型
+		精确
+			INT
+			DECIMAL
+		近似
+			FLOAT
+			DOUBLE
+	日期时间型
+		DATE
+		TIME
+		DATETIME
+		STAMP
+	
+PHP：脚本编程语言，php解释器
+	WebApp：面向对象的特性
+		Zend:
+			第一段：词法分析、语法分析、编译为Opcode；
+				opcode放置于内存中
+			第二段：执行opcode；
+		
+	PHP 缓存器：
+		APC
+		eAccelerator
+		XCache
+		
+PHP解释器-->MySQL, 如何交互？
+	bash: a.sh
+	php53-mysql
+	
+httpd+php:	
+	CGI
+	Module
+	FastCGI/fpm
+
+
+LAMP:
+	httpd
+	php53
+	php53-mysql
+	mysql-server
+	
+编译配置LAMP:
+	Linux, Apache, MySQL, PHP(Python, Perl)
+	
+Apache: ASF(apache软件基金会), httpd, tomcat, cloudware	
+	httpd: 2.4.4
+	php: 5.4.13
+	MySQL: 5.6.10 (rpm, 通用二进制, 源码)
+	
+
+httpd --> MySQL --> php --> XCache
+
+httpd
+apr: Apache Portable Runtime
+apr-util
+apr-iconv
+
+
+
+rpm包：
+	/bin, /sbin, /usr/bin, /usr/sbin
+	/lib, /usr/lib
+	/etc
+	/usr/share/{doc,man}
+	
+编译安装：
+	/usr/local/
+		bin, sbin
+		lib
+		etc
+		share/{doc,man}
+		
+	/usr/local/apr/
+		bin, sbin, lib, includes, etc, share/man
+	
+	
+apr --> apr-util --> httpd --> MySQL
+
+
+MySQL：配置文件格式, 集中式配置文件，可以为多个程序提供配置
+[mysql]
+fdaf
+
+[mysqld]
+dfa
+
+[client]
+fda
+
+/etc/my.cnf --> /etc/mysql/my.cnf --> $BASEDIR/my.cnf --> ~/.my.cnf	
+
+
+MySQL服务器维护了两类变量：
+	服务器变量：
+		定义MySQL服务器运行特性
+		SHOW GLOBAL VARIABLES [LIKE 'STRING'];
+	状态变量：
+		保存了MySQL服务器运行统计数据
+		SHOW GLOBAL STATUS [LIKE 'STRING'] 
+
+MySQL通配符：
+	_:任意单个字符
+	%：任意长度的任意字符
+
+php53-mbstring
+	
+	
+MPM: prefork, worker, event
+模块化方式使用MPM
+
+# yum -y install pcre-devel
+
+# tar xf apr-1.4.6.tar.bz2
+# cd apr-1.4.6
+# ./configure --prefix=/usr/local/apr
+# make
+# make install
+
+# tar xf apr-util-1.4.1.tar.bz2
+# cd apr-util-1.4.1
+# ./configure --prefix=/usr/local/apr-util --with-apr=/usr/local/apr
+# make
+# make install
+
+
+# tar xf httpd-2.4.4.tar.bz2
+# cd httpd-2.4.4
+# ./configure --prefix=/usr/local/apache --sysconfdir=/etc/httpd --enable-so --enable-rewirte --enable-ssl --enable-cgi --enable-cgid --enable-modules=most --enable-mods-shared=most --enable-mpms-shared=all --with-apr=/usr/local/apr --with-apr-util=/usr/local/apr-util
+# make
+# make install
+
+
+	
+
+php连接mysql并获取数据测试：
+<?php
+$conn=mysql_connect('localhost','root','123456');
+
+if (!$conn)
+  {
+  die('Could not connect: ' . mysql_error());
+  }
+
+mysql_select_db("mydb", $conn);
+
+$result = mysql_query("SELECT * FROM tb1");
+
+while($row = mysql_fetch_array($result))
+  {
+  echo $row['Name'] . " " . $row['Age'];
+  echo "<br />";
+  }
+
+mysql_close();
+?>	
+
+
+
+
+<?php
+  $conn=mysql_connect('localhost','root','redhat');
+  if ($conn)
+    echo "Success...";
+  else
+    echo "Failure...";
+?>
+
+LAMP:
+	phpMyAdmin
+	
+论坛：
+	discuz
+	phpwind
+	phpbb
+
+CMS:
+	drupal
+	joomla
+	
+LAMP
+	wordpress: 个人博客系统
+	
+
+httpd 2.4新特性：
+1、MPM可于运行时装载；
+	--enable-mpms-shared=all --with-mpm=event
+2、Event MPM
+3、异步读写
+4、在每模块及每目录上指定日志级别；
+5、每请求配置；<If>, <ElseIf>, <Else>；
+6、增强的表达式分析器；
+7、毫秒级的KeepAlive Timeout；
+8、基于域名的虚拟主机不再需要NameVirtualHost指令；
+9、降低了内存占用；
+10、支持在配置文件中使用自定义变量；
+
+--enable-modules=most
+新增加的模块：
+mod_proxy_fcgi
+mod_proxy_scgi
+mod_proxy_express
+mod_remoteip
+mod_session
+mod_ratelimit
+mod_request
+等等；
+
+
+对于基于IP的访问控制
+Order allow,deny
+allow from all
+
+2.4中不再支持此方法
+
+2.4使用Require user
+Require user USERNAME
+Require group GRPNAME
+
+
+Require ip IPADDR
+Require not ip IPADDR
+	IP
+	NETWORK/NETMASK
+	NETWORK/LENGTH
+	NET
+	
+	172.16.0.0/255.255.0.0 = 172.16.0.0/16 = 172.16
+	
+Require host HOSTNAME
+	HOSTNAME
+	DOMAIN
+	
+	www.magedu.com
+	.magedu.com
+	
+	允许所有主机访问：
+	Require all granted
+	
+	拒绝所有主机访问：
+	Require all deny
+	
+php支持扩展功能：
+	xcache
+	
+垃圾回收器
+
+
+压力测试工具：
+ab
+http_load
+webbench
+siege
+
+	
+
+
+使用ab命令测试apache服务器性能：
+
+-c concurrency：一次性发起的请求个数，默认为1；
+-i：测试时使用HEAD方法，默认为GET；
+-k：启用HTTP长连接请求方式；
+-n requests：发起的模拟请求个数；默认为1个；请求数要大于等于并发连接数；
+-q：静默模式，在请求数大于150个时不输出请求完成百分比；
+
+输出结果：
+Time taken for tests：从第一个请求连接建立到收到最后一个请求的响应报文结束所经历的时长；
+Complete requests：成功的请求数；
+
+
+
+
+-f protocol：指定请求时使用的协议，SSLv2、SSLv3、TLSv1或者ALL
+
+
+fcgi(fpm): 
+
+Web: cookie, session 共享，URL， --enable-rewrite
+
+
+
+Mail Server:
+
+SMTP: Simple Mail Tansfer Protocol
+ESMTP: Extended
+
+POP3: Post Office Protocol
+IMAP4: Internet Mail Access Protocol 
+
+
+UUCP: Unix to Unix CoPy
+	Unix主机复制文件的协议
+	
+SMTP：(25/tcp)
+
+C/S
+
+Server Client
+
+smtpd, smtp(sendmail)
+
+
+北 --> 上
+	
+
+Open Relay: 开放式中继
+
+SASL: Simple Authintication Secure Layer, 简单认证安全层
+
+WebMail
+
+LDAP: Lightweight Directory Access Protocol
+MySQL: 
+
+虚拟用户：仅用于访问某服务的数字标识；
+	用户：字符串，凭证
+
+
+MTA：邮件传输代理，SMTP服务器
+	sendmail, UUCP
+		单体结构，SUID，配置文件语法(m4编写)
+	qmail
+	postfix：模块化设计，安全，跟sendmail兼容，效率高
+	exim: MTA
+	Exchange (Windows, 异步消息协作平台)
+
+SASL: v2
+	cyrus-sasl
+	courier-authlib
+	
+MDA：
+	procmail
+	maildrop
+	
+MRA: （pop3, imap4）
+	cyrus-imap
+	dovecot
+	
+MUA: 
+	Outlook Express, Outlook
+	Foxmail
+	Thunderbird
+	Evolution
+	mutt(文本界面)
+	
+Webmail:
+	Openwebmail
+	squirrelmail
+	Extmail(Extman)
+		EMOS, CentOS
+		
+
+Postfix + SASL (courier-authlib) + MySQL
+Dovecot + MySQL
+Extmail + Extman + httpd
+
+
+postfix： rpm
+
+smtps
+pop3s
+imaps
+
+明文传输：smtp --> SMTPS
+
+pop3S
+
+
+postfix的配置文件：
+	postfix模块化:
+		master: /etc/postfix/master.cf
+		mail: /etc/postfix/main.cf
+		参数 = 值: 参数必须写在行的绝对行首，以空白开头的行被认为是上一行的延续
+			
+postconf: 配置postfix
+	-d: 显示默认的配置
+	-n: 修改了的配置
+	-m: 显示支持的查找表类型
+	-A: 显示支持的SASL客户端插件类型
+	-e PARMATER=VALUE: 更改某参数配置信息，并保存至main.cf文件中
+	
+smtp状态码：
+1xx: 纯信息
+2xx: 正确
+3xx: 上一步操作尚未完成，需要继续补充
+4xx: 暂时性错误
+5xx: 永久性错误
+
+smtp协议命令：
+	helo (smtp协议)
+	ehlo (esmtp协议)
+	mail from:
+	rcpt to:
+
+
+alias: 邮件别名
+
+abc@magedu.com: postmaster@magedu.com
+
+
+/etc/aliases --> hash --> /etc/aliases.db
+
+# newaliases
+
+postfix默认把本机的IP地址所在的网段识别为本地网络，并且为之中继邮件；
+
+
+
+
+SMTP --> SMTPS
+ESMTP 
+
+POP3: 邮局协议
+IMAP4: Internet Mail Access Protocol
+
+SASL: Simple Authentication Secure Layer
+	v1, v2
+
+MDA: 邮件投递代理
+	procmail, maildrop
+
+MUA: mutt, mail
+
+
+
+tom@a.org --> c.com (MX) --> jerry@b.net (mail.b.net) 
+
+Mail Relay: 
+
+
+MTA: sendmail, qmail, postfix, exim
+
+Postfix: 模块化设计, master(/etc/postfix/master.cf)
+		 (/etc/postfix/main.cf)
+
+	postconf
+		-d
+		-n
+		-m
+		-A: 客户端支持的SASL插件类型
+		-a: 服务器端支持的SASL插件类型
+		-e PARA=VALUE
+
+SMTP:
+	helo
+	mail from
+	rcpt to
+	data
+	.
+	quit
+
+MX: mail.magedu.com
+
+root@mail.magedu.com
+==> root@magedu.com 邮件地址伪装
+
+允许使用$PARAMETER引用相应参数的值
+
+
+MRA: cyrus-imap, dovecot
+
+dovecot依赖mysql客户端
+
+pop3: 110/tcp
+imap4: 143/tcp
+
+以明文方式工作。
+
+dove支持四种协议：pop3, imap4, pops, imaps
+
+配置文件：/etc/dovecot.conf
+
+有SASL认证能力
+
+邮箱格式：
+	mbox：一个文件存储所有邮件；
+	maildir: 一个文件存储一封邮件，所有邮件存储在一个目录中;
+
+/etc/rc.d/init.d/dovecot
+
+
+
+postfix + SASL 用户认证
+
+1、启动sasl，启动sasl服务
+
+/etc/rc.d/init.d/saslauthd
+	/etc/sysconfig/saslauthd
+
+	saslauthd -v: 显示当前主机saslauthd服务所支持的认证机制，默认为pam
+
+
+smtp: 
+connection: smtpd_client_restrictions = check_client_access hash:/etc/postfix/access 
+helo: smtpd_helo_restrictions = check_helo_access mysql:/etc/postfix/mysql_user
+mail from: smtpd_sender_restrictions = 
+rcpt to: smtpd_recipient_restrictions = 
+data: smtpd_data_restrictions = 
+
+mail from: obama@
+a.com
+
+
+/etc/aliases --> /etc/aliases.db
+
+查找表：
+	访问控制文件
+	/etc/postfix/access --> hash格式 --> /etc/postfix/access.db
+	obama@aol.com reject
+	microsoft.com OK
+
+
+
+a@magedu.com hadoop@magedu.com
+
+
+mynetworks 
+
+127.0.0.0/8 
+
+SASL认证：
+
+
+
+postfix: 
+	smtpd_client
+
+
+
+/lib64, /lib
+
+
+dovecot
+
+
+RHEL 6.3
+Development Tools
+Server Platform Development
+Desktop Platform Development
+
+
+
+MySQL: 
+	rpm:
+		mysql-server
+		mysql-devel
+
+
+RHEL自身的提供的rpm包：
+头文件：/usr/include/
+库文件：/lib, /usr/lib
+
+第三方的rpm包：
+/usr/local, /opt
+
+头文件：/usr/include, /usr/local/include
+库文件：/usr/local/lib
+	/etc/ld.so.conf
+	/etc/ld.so.conf.d/local.conf
+
+mutt -f PROTOCOL://username@magedu.com@172.16.100.1
+
+虚拟域
+
+
+postifx, sasl, 
+
+httpd, openssl-devel
+
+
+
+SASL: cyrus-sasl
+服务脚本：saslauthd 
+
+Postfix --> /usr/lib/sasl2/smtpd.conf
+pwcheck_method: saslauthd
+mech_list: PLAIN LOGIN
+
+
+
+httpd: 虚拟主机, 多个站点
+	中心主机：site
+
+
+邮件服务器, 域名，admin@magedu.com
+
+物理服务器：
+	一台服务器为多个域收发邮件
+		mydestination =
+		mydomain = a.org, b.net, c.com, ab.com,
+			使用查找表
+		myorigin =
+
+
+虚拟域：
+用户别名：
+用户帐号：虚拟用户
+
+自怜：
+
+
+虚拟用户：
+	Maildir: /var/mailbox/
+
+
+Suexec:
+
+apache, httpd
+User 
+Group 
+
+httpd(apache,apache) --> cgi(postfix,postfix):
+
+
+postfix+sasl+dovecot, 
+
+dovecot ,
+pop3, imap4
+ssl
+smtps原理
+
+caller：
+
+
+
+postfix + sasl + courier-authlib + MySQL(实现了虚拟用户、虚拟域) + dovecot + Webmail {extmail(extmain)}
+
+tom, jerry
+
+
+mageedu@126.com
+
+linuxedu@foxmail.com
+
+
+
+ssl: SMTP, POP3, IMAP4 
+	plaintext: 纯文本
+
+http --> https (ssl/tls)
+
+smtp --> smtps, 
+	25 --> 465
+
+S/MIME
+	Security
+		USER<-->USER
+			用户证书：
+				mail, hash(finger print), 
+
+OpenSSL, GPG(PGP)
+	GNU Privacy Guard
+	PGP:
+
+PKI: CA
+
+
+pop3s： 995/tcp
+
+
+imaps: 993/tcp
+
+SSL: 会话加密
+S/MIME
+
+
+https:
+
+openssl s_client -connect SERVER:PORT -CAfile /path/to/CA_CERT
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+协议报文分析器：
+	sniffer: 商业工具
+
+tcpdump, wireshark(GUI), tshark(CLI)
+
+tcpdump [options] 过滤条件
+
+获取报文的条件：		
+		
+ip src host 172.16.100.1
+tcp src or dst port 21
+
+udp dst port 53
+
+tcp src or dst port 21 AND src host 172.16.100.1
+
+tcp port 21 AND host 172.16.100.1
+		
+		
+		
+
+tcpdump的语法：
+tcpdump [options] [Protocol] [Direction] [Host(s)] [Value] [Logical Operations] [Other expression]
+
+Protocol(协议):
+Values(取值): ether, fddi, ip, arp, rarp, decnet, lat, sca, moprc, mopdl, tcp and udp.
+If no protocol is specified, all the protocols are used. 
+
+Direction(流向):
+Values(取值): src, dst, src and dst, src or dst
+If no source or destination is specified, the "src or dst" keywords are applied. (默认是src or dst)
+For example, "host 10.2.2.2" is equivalent to "src or dst host 10.2.2.2".
+
+
+Host(s)(主机):
+Values(替代关键字): net, port, host, portrange.
+If no host(s) is specified, the "host" keyword is used. 默认如果此段没有指定关键字，默认即host。
+For example, "src 10.1.1.1" is equivalent to "src host 10.1.1.1". 
+
+
+Logical Operations:
+(1) AND 
+and or &&
+(2) OR 
+or or ||
+(3) EXCEPT 
+not or !
+
+
+常用选项：
+
+-i any : Listen on all interfaces just to see if you're seeing any traffic.
+-n : Don't resolve hostnames.
+-nn : Don't resolve hostnames or port names.
+-X : Show the packet's contents in both hex and ASCII.
+-XX : Same as -X, but also shows the ethernet header.
+-v, -vv, -vvv : Increase the amount of packet information you get back.
+-c # : Only get x number of packets and then stop.
+-s : Define the snaplength (size) of the capture in bytes. Use -s0 to get everything, unless you are intentionally capturing less.
+-S : Print absolute sequence numbers.
+-e : Get the ethernet header as well.
+-q : Show less protocol information.
+-E : Decrypt IPSEC traffic by providing an encryption key.
+-A ：Display Captured Packets in ASCII
+-w /path/to/some_file : Capture the packets and write into a file 
+-r /path/from/some_file : Reading the packets from a saved file 
+-tttt : Capture packets with proper readable timestamp
+
+
+ip host 172.16.100.1
+ip src host 172.16.100.1
+ip dst host 172.16.100.1
+ip src and dst host 172.16.100.1
+
+tcp src port 110
+
+
+关闭OpenRelay
+
+RBL: Realtime Black List
+	实时黑名单
+
+内容过滤器：
+	APACHE: Spamassassin
+		Perl: 垃圾邮件分拣器
+			特征码
+
+病毒邮件：
+	clamav: 开源杀毒软件
+		病毒邮件服务器网关
+
+
+呼叫器：caller, 
+	MIMEDefang, Mailscanner, Amavisd-new
+
+
+amavisd-new: spamassassin, clamav
+
+perl: CPAN
+
+
+
+
+我未曾见过一个早起、勤奋、谨慎、诚实的人抱怨命运不好！  ——富兰克林
+
+
+
+
+
+iptables/netfilter
+
+
+pop3s: 995/tcp
+smtps: 465/tcp
+
+Name Resolve: Username --> UID, Group-->GID, Service Name --> PORT, Hostname --> IP
+
+	Username --> UID: /etc/passwd
+	Hostname --> IP: DNS, /etc/hosts
+	Service Name --> Ports: /etc/services, MySQL: services,ports
+		只要有一种数据存储格式：解析库，不同解析库需要不同查询方式
+
+	nsswitch
+
+S/MIME
+	Openssl, GPG(PGP)
+
+maildrop: MDA, Courier, 邮件投递
+
+
+
+FTP：File Transfer Protocol
+	21/tcp:
+
+文件共享服务：应用层，ftp
+		NFS: Network File System (RPC: Remote Procedure Call, 远程过程调用)
+		Samba: CIFS/SMB
+
+FTP: tcp, 两个连接
+	命令连接，控制连接：21/tcp
+	数据连接: 
+		主动模式：20/tcp
+		被动模式：端口随机
+
+	数据传输模式(自动模式)：
+		二进制：
+		文本：
+		ftp server --> ftp client
+
+
+This is a test file. --> 
+结构化数据
+半结构化数据
+非结构化数据
+
+
+文本，二进制
+	html, 
+	mp3, jpeg
+
+
+服务器端程序：
+	wu-ftpd：
+	vsftpd: Very Secure ftp Daemon
+	proftpd:
+	pureftpd
+	Filezilla
+	Serv-U
+
+客户端程序：
+	CLI：
+		ftp
+		lftp
+
+	GUI:
+		gftpd
+		FlashFXP
+		Cuteftp
+		Filezilla
+
+vsftpd:
+	/etc/vsftpd: 配置文件目录
+	/etc/init.d/vsftpd: 服务脚本
+	/usr/sbin/vsftpd: 主程序
+
+基于PAM实现用户认证：
+	/etc/pam.d/*
+	/lib/security/*
+	/lib64/security/*
+	支持虚拟用户
+
+vsftpd: (ftp, ftp) 
+	/var/ftp：ftp服务根目录
+
+上传和下载： 
+
+mail: 
+
+ftp: 系统用户
+	匿名用户 --> 系统用户: anonymous_enable
+	系统用户: local_enable
+	虚拟用户 --> 系统用户
+
+/var/ftp: ftp用户的家目录
+	匿名用户访问目录
+
+
+chroot: 禁锢用户于其家目录中
+
+
+系统用户：
+	write_enable=YES: 上传文件
+
+
+
+文件服务权限：文件系统权限*文件共享权限
+
+
+守护进程：
+	独立守护：适用于访问量大，用户在线时间长的用户
+	瞬时守护
+		由xinetd代为管理
+
+vsftpd: 
+	max_clients=#
+	max_per_ip=#
+
+安全通信方式：
+	ftps: ftp+ssl/tls
+	sftp: OpenSSH, SubSystem, sftp(SSH)
+
+
+vsftpd: PAM(手动定义配置文件)
+	匿名
+	本地
+	虚拟用户
+		MySQL: VSFTPD, users ： Name,Password
+		/etc/vsftpd/vusers: --> db_load 
+			USERNAME
+			PASSWORD
+
+db4-utils
+
+postconf -m
+
+
+
+

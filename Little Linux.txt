@@ -1,0 +1,403 @@
+
+一步步手动构建小于10M的类嵌入式Linux系统
+
+前提：
+1、一个作为宿主机的Linux；本文使用的是Redhat Enterprise Linux 5.8；
+2、在宿主机上提供一块额外的硬盘作为新系统的存储盘，为了降低复杂度，这里添加使用一块IDE接口的新硬盘；
+3、Linux内核源码，busybox源码；本文使用的是目前最新版的linux-2.6.38.5和busybox-1.20.2。
+
+说明：本文是一个step by step的实做指南；
+
+一、为系统上的新硬盘建立分区，这里根据需要先建立一个大小为100M的主分区作为新建系统的boot分区和一个512M的分区作为目标系统（即正在构建的新系统，后面将沿用此名称）的根分区；100M的分区格式化后将其挂载至/mnt/boot目录下；512M的分区格式化后将挂载至/mnt/sysroot目录；
+
+说明：
+1、此处的boot和sysroot的挂载点目录名称尽量不要修改，尤其是boot目录，否则您必须保证后面的许多步骤都做了相应的改动；
+2、新建系统的boot目录也可以跟根目录在同一个分区，这种方式比独立分区还要简单些，因此这里将不对此种方法再做出说明；
+
+二、编译内核源代码，为新系统提供一个所需的内核（本例中的源代码包都位于/usr/src目录中）
+
+# cd  /usr/src
+# tar jxvf linux-2.6.38.5.tar.bz2
+# ln  -sv  linux-2.6.38.5  linux
+# cd linux
+
+然后下载ftp://172.16.0.1/pub/Sources/kernel/kernel-2.6.38.1-i686.cfg至当前目录中，并重命名为.config。
+
+# make menuconfig
+
+根据您的实际和规划选择所需要的功能；本实例计划制作一个具有网络的功能的微型linux且不打算使用内核模块，因此，这里选择把本机对应的网卡驱动直接编译进了内核。作者使用的是vmware Workstation虚拟机，所以，所需的网上驱动是pcnet32的，其它的均可按需要进行选择。选择完成后需要保存至当前目录下.config文件中。
+
+# make  SUBDIR=arch/
+# cp arch/x86/boot/bzImage  /mnt/boot
+
+# make menuconfig
+
+提示：为了实现后面的功能，请务必将文件系统中的ext3和网卡的驱动程序直接编译进内核；否则，就需要手动装载这些相关文件系统的模块；
+
+三、编译busybox
+
+# cd /usr/src
+# tar  -jxvf  busybox-1.20.2.tar.bz2
+# cd  busybox-1.20.2
+# mkdir include/mtd 
+# cp  /usr/src/linux/include/mtd/ubi-user.h  include/mtd/
+# make menuconfig
+
+说明：
+1、此处需要选择 Busybox Settings --> Build Options -->  Build BusyBox as a static binary (no shared libs)，这样可以把Busybox编译成一个不使用共享库的静态二进制文件，从而避免了对宿主机的共享库产生依赖；但你也可以不选择此项，而完成编译后把其依赖的共享库复制至目标系统上的/lib目录中即可；这里采用后一种办法。
+2、修改安装位置为/mnt/sysroot;方法为：Busybox Settings --> Installation Options --> (./_install) BusyBox installation prefix，修改其值为/mnt/sysroot。
+
+# make  install
+
+安装后的文件均位于/mnt/sysroot目录中；但为了创建initrd，并实现让其启动以后将真正的文件系统切换至目标系统分区上的rootfs，您还需要复制一份刚安装在/mnt/sysroot下的busybox至另一个目录，以实现与真正的根文件系统分开制作。我们这里选择使用/mnt/temp目录；
+
+# mkdir -pv /tmp/busybox
+# cp -r /mnt/sysroot/*  /tmp/busybox
+
+四、制作initrd
+
+# cd  /tmp/busybox
+
+1、建立rootfs：
+# mkdir -pv  proc  sys  etc/init.d  tmp  dev  mnt/sysroot
+
+2、创建两个必要的设备文件：
+# mknod  dev/console  c  5  1
+# mknod  dev/null  c  1  3
+
+3、为initrd制作init程序，此程序的主要任务是实现rootfs的切换，因此，可以以脚本的方式来实现它：
+
+# rm  linuxrc
+# vim  init
+添加如下内容：
+#!/bin/sh
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+insmod /lib/modules/jbd.ko
+insmod /lib/modules/ext3.ko
+mdev -s
+mount -t ext3 /dev/hda2  /mnt/sysroot
+exec  switch_root  /mnt/sysroot  /sbin/init
+
+给此脚本执行权限：
+chmod  +x  init
+
+4、制作initrd
+# find  .  | cpio  --quiet  -H newc  -o  | gzip  -9 -n > /mnt/boot/initrd.gz
+
+五、建立真正的根文件系统
+
+# cd  /mnt/sysroot
+
+1、建立rootfs：
+# mkdir -pv  proc  sys  etc/rc.d/init.d  tmp  dev/pts  boot  var/log  usr/lib
+
+2、创建两个必要的设备文件：
+# mknod  dev/console  c  5  1
+# mknod  dev/null  c  1  3
+
+3、建立系统初始化脚本文件
+
+# vim  etc/rc.d/rc.sysinit
+
+添加如下内容：
+  
+#!/bin/sh
+echo -e "\tWelcome to  \033[31mMageEdu\033[0m Linux"
+
+echo -e "Remounting the root filesystem ..."
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -o  remount,rw  / 
+
+echo -e "Creating the files of device ..."
+mdev -s 
+
+echo -e "Mounting the filesystem ..."
+mount -a
+swapon -a
+
+echo -e "Starting the log daemon ..."
+syslogd
+klogd
+
+echo -e "Configuring loopback interface ..."
+ifconfig  lo  127.0.0.1/24
+ifconfig eth0 172.16.100.9/16
+
+# END
+
+而后让此脚本具有执行权限：
+chmod +x  etc/init.d/rc.sysinit
+
+4、配置init及其所需要inittab文件
+
+# cd  /mnt/sysroot
+# rm  -f  linuxrc
+
+为init进程提供配置文件：
+# vim  etc/inittab
+
+添加如下内容：
+::sysinit:/etc/rc.d/rc.sysinit
+console::respawn:-/bin/sh
+::ctrlaltdel:/sbin/reboot
+::shutdown:/bin/umount -a -r
+
+5、为系统准备一个“文件系统表”配置文件/etc/fstab
+# vim  etc/fstab
+
+添加如下内容：
+sysfs                   /sys                    sysfs   defaults        0 0
+proc                    /proc                   proc    defaults        0 0
+/dev/hda1               /boot                   ext3    defaults        0 0
+/dev/hda2               /                       ext3    defaults        1 1
+
+6、由于在rc.sysinit文件中启动了日志进程，因此系统在运行中会产生大量日志并将其显示于控制台；这将会经常性的打断正在进行的工作，为了避免这种情况，我们这里为日志进程建立配置文件，为其指定将日志发送至/var/log/messages文件；
+
+# vim  etc/syslog.conf
+
+添加如下一行：
+*.info    /var/log/messages
+
+六、好了，至此一个简易的基于内存运行的小系统已经构建出来了，我们接下来为此系统创建所需的引导程序
+
+# grub-install  --root-directory=/mnt  /dev/hda
+
+说明：此处的/dev/hda为目标系统所在的那块新磁盘；
+
+接下来为grub建立配置文件：
+# vim  /mnt/boot/grub/grub.conf
+
+添加类似如下内容：
+
+default        0
+timeout        3
+color    light-green/black light-magenta/black
+title    MageEdu Linux (2.6.38.5)
+    root (hd0,0)
+    kernel /bzImage ro root=/dev/hda2 quiet
+    initrd /initrd.gz
+
+
+接下来将此块硬盘接入一个新的主机（这里使用的是虚拟机），启动一下并测试使用。
+
+七、为新构建的ToyLinux启用虚拟控制台
+
+这个可以通过宿主机来实现，也可以直接启动刚构建成功的小Linux进行配置。我们这里采用通过宿主机的方式（重新启动宿主机）：
+# cd /mnt/sysroot
+
+将 etc/inittab文件改为如下内容：
+::sysinit:/etc/init.d/rc.sysinit
+tty1::askfirst:/bin/sh
+tty2::askfirst:/bin/sh
+tty3::askfirst:/bin/sh
+tty4::askfirst:/bin/sh
+tty5::askfirst:/bin/sh
+tty6::askfirst:/bin/sh
+::ctrlaltdel:/sbin/reboot
+::shutdown:/bin/umount -a -r
+
+好了，接下来就可以测试验正六个虚拟控制台的使用了。
+
+八、尽管上述第七步已经实现了虚拟控制台，但其仍是直接进入系统，且系统没有用户帐号等安全设施，这将不利于系统的安全性。因此，接下来的这步实现为系统添加用户帐号（这里仍然基于宿主机实现）。
+
+1、为目标主机建立passwd帐号文件
+# cd /mnt/sysroot
+# vim etc/passwd
+
+添加如下内容：
+root:x:0:0::/root:/bin/sh
+而后为root用户创建“家”目录：
+# mkdir root
+
+2、为目标主机建立group帐号文件
+# vim  etc/group
+
+添加如下内容：
+root:x:0:
+
+3、为目标主机建立shadow影子口令文件，这里采用直接复制宿主机的shadow文件中关于root口令行的行来实现
+# grep  "^root"  /etc/shadow  > etc/shadow
+
+注：等目标主机启动时，root用户的口令也是宿主机的root用户的口令。您可以在目标主机启动以后再动手更改root用户的口令。
+
+4、将 etc/inittab文件改为如下内容：
+::sysinit:/etc/init.d/rc.sysinit
+::respawn:/sbin/getty 9600 tty1
+::respawn:/sbin/getty 9600 tty2
+::respawn:/sbin/getty 9600 tty3
+::respawn:/sbin/getty 9600 tty4
+::respawn:/sbin/getty 9600 tty5
+::respawn:/sbin/getty 9600 tty6
+::shutdown:/bin/umount -a -r
+::ctrlaltdel:/sbin/reboot
+
+
+好了，接下来就可以重新启动目标主机进行验正了。
+
+九、在系统登录时提供banner信息
+
+这个可以通过宿主机来实现，也可以直接在目标主机上进行配置。这里采用直接在目标主机上配置的方式：
+
+# vi  /etc/issue
+添加如下内容：
+Welcome to MageEdu Linux(http://www.magedu.com)...
+Kernel \r
+
+注：这里的内容可以根据你的需要进行修改。
+
+十、在系统启动时为系统提供主机名称：
+
+这个可以通过宿主机来实现，也可以直接在目标主机上进行配置。这里采用直接在目标主机上配置的方式：
+
+1、创建保存主机名称的配置文件
+# mkdir /etc/sysconfig
+# vi  /etc/sysconfig/network
+添加如下内容：
+HOSTNAME=marion.example.com
+
+2、编辑系统初始化脚本，实现开机过程中设定主机名称
+# vi /etc/init.d/rc.sysinit
+在文件尾部添加如下行：
+
+HOSTNAME=
+[ -e  /etc/sysconfig/network  && -r /etc/sysconfig/network ] && source /etc/sysconfig/network
+[ -z ${HOSTNAME} ] &&　HOSTNAME="localhost"
+/bin/hostname  ${HOSTNAME}
+
+十一、通过dropbear为系统提供ssh远程连接服务
+
+注：以下过程在宿主机上实现。
+
+1、编译安装dropbear
+# tar xf dropbear-2013.56.tar.bz2 
+# cd dropbear-2013.56
+# ./configure 
+# make
+# make install
+
+2、移植dropbear至目标系统
+
+移植二进制程序及其依赖的库文件，方能实现其在目标系统上正常运行。建议使用脚本进行（这里将其保存为bincp.sh），其会自动移植指定的命令及依赖的库文件。
+#!/bin/bash
+#
+read -t 30 -p "Target System Directory[/mnt/sysroot]: " DEST
+DEST=${DEST:-/mnt/sysroot}
+
+libcp() {
+  LIBPATH=${1%/*}
+  [ ! -d $DEST$LIBPATH ] && mkdir -p $DEST$LIBPATH
+  [ ! -e $DEST${1} ] && cp $1 $DEST$LIBPATH && echo "copy lib $1 finished."
+}
+
+bincp() {
+  CMDPATH=${1%/*}
+  [ ! -d $DEST$CMDPATH ] && mkdir -p $DEST$CMDPATH
+  [ ! -e $DEST${1} ] && cp $1 $DEST$CMDPATH
+
+  for LIB in  `ldd $1 | grep -o "/.*lib\(64\)\{0,1\}/[^[:space:]]\{1,\}"`; do
+    libcp $LIB
+  done
+}
+
+read -p "Your command: " CMD
+until [ $CMD == 'q' ]; do
+   ! which $CMD && echo "Wrong command" && read -p "Input again:" CMD && continue
+  COMMAND=` which $CMD | grep -v "^alias" | grep -o "[^[:space:]]\{1,\}"`
+  bincp $COMMAND
+  echo "copy $COMMAND finished."
+  read -p "Continue: " CMD
+done
+
+接下来运行此脚本，分别输入dropbear、dropbearkey和dbclient即可；这些命令会被存储于目标系统的/usr/local/sbin或/usr/local/bin目录中。
+
+3、为远程登录的用户提供伪终端设备文件
+
+编辑/mnt/sysroot/etc/fstab，添加如下一行：
+devpts		/dev/pts		devpts	mode=620	0 0
+
+创建所需要的目录：
+# mkdir /mnt/sysroot/dev/pts
+
+4、为目标系统的dropbear生成主机密钥
+
+默认情况下，dropbear到/etc/dropbear目录中查找使用的rsa格式主机密钥(默认名称为dropbear_rsa_host_key)和dss格式的主机密钥(默认名称为dropbear_dss_host_key)。其中，rsa格式可使用不同长度的密钥，但dss格式只使用1024位的密钥。
+
+# mkdir /mnt/sysroot/etc/dropbear
+# dropbearkey -t rsa -f /etc/dropbear/dropbear_rsa_host_key -s 2048
+# dropbearkey -t rsa -f /etc/dropbear/dropbear_dss_host_key
+
+在生成rsa格式的key时，其长度指定部分-s 2048可以省略，也可以为其指定为其它长度，但长度需要为8的整数倍。
+
+说明：此步骤也可以在目标主机上进行，但路径要做相应的修改。
+
+5、定义安全shell
+
+安全起见，dropbear默认情况下仅允许其默认shell出现在/etc/shells文件中的用户远程登录，因此，这里还需要创建/etc/shells文件，并添加所有允许的shell。
+
+# cat >> /mnt/sysroot/etc/shells << EOF
+/bin/sh
+/bin/ash
+/bin/hush
+/bin/bash
+EOF
+
+6、为目标主机提供网络服务转换机制
+
+在宿主机上使用默认选项编译的dropbear将依赖nsswitch实现用户名称解析，因此，还需要为目标主机提供nss相关的库文件及配置文件。
+
+# cat >> /mnt/sysroot/etc/nsswitch.conf << EOF
+passwd:     files
+shadow:     files
+group:      files
+hosts:      files dns
+EOF
+
+复制所需要的库文件：
+# cp -d /lib/libnss_files*  /mnt/sysroot/lib/
+# cp -d /usr/lib/libnss3.so /usr/lib/libnss_files.so /mnt/sysroot/usr/lib/
+
+
+7、测试
+
+启动目标主机，设定好网络属性后，使用如下命令启动dropbear服务即可。
+# /usr/local/sbin/dropbear
+
+接下来就可以远程进行连接测试了。
+
+
+
+十二、通过nginx提供web服务
+
+1、在宿主机编译安装nginx-1.2.5
+# tar nginx-1.2.5.tar.gz
+# cd nginx-1.2.5
+# ./configure --prefix=/usr/local --conf-path=/etc/nginx/nginx.conf  --error-log-path=/var/log/nginx/error.log --user=nginx --group=nginx --http-log-path=/var/log/nginx/access.log  --without-pcre --without-http_rewrite_module --without-http_geo_module --without-http_fastcgi_module  --without-http_uwsgi_module  --without-http_scgi_module --without-http_memcached_module --without-http_upstream_ip_hash_module --without-http_upstream_least_conn_module  --without-http_upstream_keepalive_module --http-log-path=/var/log/nginx
+# make
+# make install
+
+2、移植nginx至目标系统
+
+(1) 移植二进制程序及其依赖的库文件，方能实现其在目标系统上正常运行。建议使用前面的bincp.sh脚本进行。
+
+(2) 移植配置文件至目标系统
+# mkdir  /mnt/sysroot/etc/nginx/
+# cp /etc/nginx/{nginx.conf,mime.types}  /mnt/sysroot/etc/nginx/
+
+(3) 移植测试页面至目标系统，当然，也可以不采用下面的步骤而在目标系统上直接创建。
+# mkdir /mnt/sysroot/usr/local/
+# cp -r /usr/local/html  /mnt/sysroot/usr/local/
+
+3、测试
+
+启动目标主机，首先配置好网络属性，并使用adduser为其添加nginx用户和nginx组。
+
+然后使用如下命令启动nginx，即可通过浏览器测试访问。
+
+# /usr/local/nginx
+
+
+
+
+

@@ -1,0 +1,884 @@
+
+
+MySQL 5.6引入的GTID(Global Transaction IDs)使得其复制功能的配置、监控及管理变得更加易于实现，且更加健壮。
+
+要在MySQL 5.6中使用复制功能，其服务配置段[mysqld]中于少应该定义如下选项：
+
+binlog-format：二进制日志的格式，有row、statement和mixed几种类型；
+	需要注意的是：当设置隔离级别为READ-COMMITED必须设置二进制日志格式为ROW，现在MySQL官方认为STATEMENT这个已经不再适合继续使用；但mixed类型在默认的事务隔离级别下，可能会导致主从数据不一致；
+log-slave-updates、gtid-mode、enforce-gtid-consistency、report-port和report-host：用于启动GTID及满足附属的其它需求；
+master-info-repository和relay-log-info-repository：启用此两项，可用于实现在崩溃时保证二进制及从服务器安全的功能；
+sync-master-info：启用之可确保无信息丢失；
+slave-paralles-workers：设定从服务器的SQL线程数；0表示关闭多线程复制功能；
+binlog-checksum、master-verify-checksum和slave-sql-verify-checksum：启用复制有关的所有校验功能；
+binlog-rows-query-log-events：启用之可用于在二进制日志记录事件相关的信息，可降低故障排除的复杂度；
+log-bin：启用二进制日志，这是保证复制功能的基本前提；
+server-id：同一个复制拓扑中的所有服务器的id号必须惟一；
+
+
+report-host：
+The host name or IP address of the slave to be reported to the master during slave registration. This value appears in the output of SHOW SLAVE HOSTS on the master server.
+
+report-port:
+The TCP/IP port number for connecting to the slave, to be reported to the master during slave registration.
+
+master-info-repository:
+The setting of this variable determines whether the slave logs master status and connection information to a FILE (master.info), or to a TABLE (mysql.slave_master_info)
+
+relay-log-info-repository：
+This option causes the server to log its relay log info to a file or a table.
+
+log_slave_updates：
+Whether updates received by a slave server from a master server should be logged to the slave's own binary log. Binary logging must be enabled on the slave for this variable to have any effect. 
+
+ enforce_gtid_consistency：
+
+
+
+
+一、简单主从模式配置步骤
+
+1、配置主从节点的服务配置文件
+
+1.1、配置master节点：
+[mysqld]
+binlog-format=ROW
+log-bin=master-bin
+log-slave-updates=true
+gtid-mode=on 
+enforce-gtid-consistency=true
+master-info-repository=TABLE
+relay-log-info-repository=TABLE
+sync-master-info=1
+slave-parallel-workers=2
+binlog-checksum=CRC32
+master-verify-checksum=1
+slave-sql-verify-checksum=1
+binlog-rows-query-log_events=1
+server-id=1
+report-port=3306
+port=3306
+datadir=/mydata/data
+socket=/tmp/mysql.sock
+report-host=master.magedu.com
+
+1.2、配置slave节点：
+[mysqld]
+binlog-format=ROW
+log-slave-updates=true
+gtid-mode=on 
+enforce-gtid-consistency=true
+master-info-repository=TABLE
+relay-log-info-repository=TABLE
+sync-master-info=1
+slave-parallel-workers=2
+binlog-checksum=CRC32
+master-verify-checksum=1
+slave-sql-verify-checksum=1
+binlog-rows-query-log_events=1
+server-id=11
+report-port=3306
+port=3306
+log-bin=mysql-bin.log
+datadir=/mydata/data
+socket=/tmp/mysql.sock
+report-host=slave.magedu.com
+
+2、创建复制用户
+
+mysql> GRANT REPLICATION SLAVE ON *.* TO repluser@172.16.100.7 IDENTIFIED BY 'replpass';
+
+说明：172.16.100.7是从节点服务器；如果想一次性授权更多的节点，可以自行根据需要修改；
+
+3、为备节点提供初始数据集
+
+锁定主表，备份主节点上的数据，将其还原至从节点；如果没有启用GTID，在备份时需要在master上使用show master status命令查看二进制日志文件名称及事件位置，以便后面启动slave节点时使用。
+
+4、启动从节点的复制线程
+
+如果启用了GTID功能，则使用如下命令：
+mysql> CHANGE MASTER TO MASTER_HOST='master.magedu.com', MASTER_USER='repluser', MASTER_PASSWORD='replpass', MASTER_AUTO_POSITION=1;
+
+没启用GTID，需要使用如下命令：
+slave> CHANGE MASTER TO MASTER_HOST='172.16.100.6',
+-> MASTER_USER='repluser',
+-> MASTER_PASSWORD='replpass',
+-> MASTER_LOG_FILE='master-bin.000003',
+-> MASTER_LOG_POS=1174;
+
+二、半同步复制
+
+1、分别在主从节点上安装相关的插件
+
+master> INSTALL PLUGIN rpl_semi_sync_master SONAME 'semisync_master.so';
+slave> INSTALL PLUGIN rpl_semi_sync_slave SONAME 'semisync_slave.so';
+
+2、启用半同步复制
+
+在master上的配置文件中，添加
+rpl_semi_sync_master_enabled=ON
+
+在至少一个slave节点的配置文件中添加
+rpl_semi_sync_slave_enabled=ON
+
+而后重新启动mysql服务即可生效。
+
+
+或者，也可以mysql服务上动态启动其相关功能：
+
+master> SET GLOBAL rpl_semi_sync_master_enabled = ON;
+slave> SET GLOBAL rpl_semi_sync_slave_enabled = ON;
+slave> STOP SLAVE IO_THREAD; START SLAVE IO_THREAD;
+
+3、确认半同步功能已经启用
+
+master> CREATE DATABASE magedudb;
+master> SHOW STATUS LIKE 'Rpl_semi_sync_master_yes_tx';
+
+slave> SHOW DATABASES; 
+
+
+
+
+三、MySQL Proxy
+
+
+1、源码安装时，MySQL proxy的依赖关系：
+
+libevent 1.x or higher (1.3b or later is preferred).
+lua 5.1.x or higher.
+glib2 2.6.0 or higher.
+pkg-config.
+libtool 1.5 or higher.
+MySQL 5.0.x or higher developer files.
+
+2、安装
+
+# tar zxf mysql-proxy-0.8.2.tar.gz
+# cd mysql-proxy-0.8.2
+# ./configure
+# make
+
+# make check
+
+如果管理员有密码，上面的步骤则需要使用如下格式进行：
+# MYSQL_PASSWORD=root_pwd make check
+
+# make install
+
+默认情况下， mysql-proxy安装在/usr/local/sbin/mysql-proxy，而Lua示例脚本安装在/usr/local/share目录中。
+
+3、配置指令
+
+mysql proxy的各配置参数请参见官方文档，http://dev.mysql.com/doc/refman/5.6/en/mysql-proxy-configuration.html
+
+
+
+
+
+
+使用rpm包在rhel6上安装mysql-proxy-0.8.2，其会提供配置文件及服务脚本，但没有提供读写分享的脚本。
+
+
+/etc/sysconfig/mysql-proxy文件用于定义mysql-proxy的启动参数。
+
+ADMIN_USER – the user for the proxy's admin interface. You can leave the default admin user.
+ADMIN_PASSWORD – the password for the admin user in clear text. Change the default password for better security.
+ADMIN_LUA_SCRIPT – the admin script in the Lua programming language. Without this script the admin interface cannot work. You can leave the default value.
+PROXY_USER – the system user under which the proxy will work. By default it is mysql-proxy, and it's safe to leave it as is.
+PROXY_OPTIONS – proxy options such as logging level, plugins, and Lua scripts to be loaded.
+
+
+其中PROXY_OPTIONS是最常用的一个选项，用于定义mysql-proxy工作时的重要参数，例如：
+PROXY_OPTIONS="--daemon --log-level=info --log-use-syslog --plugins=proxy --plugins=admin --proxy-backend-addresses=192.168.1.102:3306 --proxy-read-only-backend-addresses=192.168.1.105:3306 --proxy-lua-script=/usr/lib/mysql-proxy/lua/proxy/rw-splitting.lua"
+
+
+
+
+
+
+
+
+
+
+
+四、安装配置mysql-proxy:
+
+4.1 下载所需要的版本，这里的系统平台为rhel6.4 32位系统，因此就以mysql-proxy-0.8.3-linux-glibc2.3-x86-32bit.tar.gz为例。
+
+# tar xf mysql-proxy-0.8.3-linux-glibc2.3-x86-32bit.tar.gz -C /usr/local
+# cd /usr/local
+# ln -sv mysql-proxy-0.8.3-linux-glibc2.3-x86-32bit  mysql-proxy
+
+添加代理用户
+# useradd mysql-proxy
+
+4.2 为mysql-proxy提供SysV服务脚本，内容如下所示
+
+#!/bin/bash
+#
+# mysql-proxy This script starts and stops the mysql-proxy daemon
+#
+# chkconfig: - 78 30
+# processname: mysql-proxy
+# description: mysql-proxy is a proxy daemon for mysql
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+prog="/usr/local/mysql-proxy/bin/mysql-proxy"
+
+# Source networking configuration.
+if [ -f /etc/sysconfig/network ]; then
+    . /etc/sysconfig/network
+fi
+
+# Check that networking is up.
+[ ${NETWORKING} = "no" ] && exit 0
+
+# Set default mysql-proxy configuration.
+ADMIN_USER="admin"
+ADMIN_PASSWD="admin"
+ADMIN_LUA_SCRIPT="/usr/local/mysql-proxy/share/doc/mysql-proxy/admin.lua"
+PROXY_OPTIONS="--daemon"
+PROXY_PID=/var/run/mysql-proxy.pid
+PROXY_USER="mysql-proxy"
+
+# Source mysql-proxy configuration.
+if [ -f /etc/sysconfig/mysql-proxy ]; then
+    . /etc/sysconfig/mysql-proxy
+fi
+
+RETVAL=0
+
+start() {
+    echo -n $"Starting $prog: "
+    daemon $prog $PROXY_OPTIONS --pid-file=$PROXY_PID --proxy-address="$PROXY_ADDRESS" --user=$PROXY_USER --admin-username="$ADMIN_USER" --admin-lua-script="$ADMIN_LUA_SCRIPT" --admin-password="$ADMIN_PASSWORD"
+    RETVAL=$?
+    echo
+    if [ $RETVAL -eq 0 ]; then
+        touch /var/lock/subsys/mysql-proxy
+    fi
+}
+
+stop() {
+    echo -n $"Stopping $prog: "
+    killproc -p $PROXY_PID -d 3 $prog
+    RETVAL=$?
+    echo
+    if [ $RETVAL -eq 0 ]; then
+        rm -f /var/lock/subsys/mysql-proxy
+        rm -f $PROXY_PID
+    fi
+}
+# See how we were called.
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    restart)
+        stop
+        start
+        ;;
+    condrestart|try-restart)
+        if status -p $PROXY_PIDFILE $prog >&/dev/null; then
+            stop
+            start
+        fi
+        ;;
+    status)
+        status -p $PROXY_PID $prog
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart|reload|status|condrestart|try-restart}"
+        RETVAL=1
+        ;;
+esac
+
+exit $RETVAL
+
+将上述内容保存为/etc/rc.d/init.d/mysql-proxy，给予执行权限，而后加入到服务列表。
+# chmod +x /etc/rc.d/init.d/mysql-proxy
+# chkconfig --add mysql-proxy
+
+
+
+4.3 为服务脚本提供配置文件/etc/sysconfig/mysql-proxy，内容如下所示：
+
+# Options for mysql-proxy 
+ADMIN_USER="admin"
+ADMIN_PASSWORD="admin"
+ADMIN_ADDRESS=""
+ADMIN_LUA_SCRIPT="/usr/local/mysql-proxy/share/doc/mysql-proxy/admin.lua"
+PROXY_ADDRESS=""
+PROXY_USER="mysql-proxy"
+PROXY_OPTIONS="--daemon --log-level=info --log-use-syslog"
+
+
+其中最后一行，需要按实际场景进行修改，例如：
+PROXY_OPTIONS="--daemon --log-level=info --log-use-syslog --plugins=proxy --plugins=admin --proxy-backend-addresses=172.16.100.6:3306 --proxy-read-only-backend-addresses=172.16.100.7:3306 --proxy-lua-script=/usr/local/mysql-proxy/share/doc/mysql-proxy/rw-splitting.lua"
+
+其中的proxy-backend-addresses选项和proxy-read-only-backend-addresses选项均可重复使用多次，以实现指定多个读写服务器或只读服务器。
+
+4.4 mysql-proxy的配置选项
+
+mysql-proxy的配置选项大致可分为帮助选项、管理选项、代理选项及应用程序选项几类，下面一起去介绍它们。
+
+--help
+--help-admin
+--help-proxy
+--help-all ———— 以上四个选项均用于获取帮助信息；
+
+--proxy-address=host:port ———— 代理服务监听的地址和端口；
+--admin-address=host:port ———— 管理模块监听的地址和端口；
+--proxy-backend-addresses=host:port ———— 后端mysql服务器的地址和端口；
+--proxy-read-only-backend-addresses=host:port ———— 后端只读mysql服务器的地址和端口；
+--proxy-lua-script=file_name ———— 完成mysql代理功能的Lua脚本；
+--daemon ———— 以守护进程模式启动mysql-proxy；
+--keepalive ———— 在mysql-proxy崩溃时尝试重启之；
+--log-file=/path/to/log_file_name ———— 日志文件名称；
+--log-level=level ———— 日志级别；
+--log-use-syslog ———— 基于syslog记录日志；
+--plugins=plugin,.. ———— 在mysql-proxy启动时加载的插件；
+--user=user_name ———— 运行mysql-proxy进程的用户；
+--defaults-file=/path/to/conf_file_name ———— 默认使用的配置文件路径；其配置段使用[mysql-proxy]标识；
+--proxy-skip-profiling ———— 禁用profile；
+--pid-file=/path/to/pid_file_name ———— 进程文件名；
+
+
+
+
+5、复制如下内容建立admin.lua文件，将其保存至/usr/local/mysql-proxy/share/doc/mysql-proxy/目录中。
+
+--[[ $%BEGINLICENSE%$
+ Copyright (c) 2007, 2012, Oracle and/or its affiliates. All rights reserved.
+
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License as
+ published by the Free Software Foundation; version 2 of the
+ License.
+
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ GNU General Public License for more details.
+
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
+ 02110-1301  USA
+
+ $%ENDLICENSE%$ --]]
+
+function set_error(errmsg) 
+	proxy.response = {
+		type = proxy.MYSQLD_PACKET_ERR,
+		errmsg = errmsg or "error"
+	}
+end
+
+function read_query(packet)
+	if packet:byte() ~= proxy.COM_QUERY then
+		set_error("[admin] we only handle text-based queries (COM_QUERY)")
+		return proxy.PROXY_SEND_RESULT
+	end
+
+	local query = packet:sub(2)
+
+	local rows = { }
+	local fields = { }
+
+	if query:lower() == "select * from backends" then
+		fields = { 
+			{ name = "backend_ndx", 
+			  type = proxy.MYSQL_TYPE_LONG },
+
+			{ name = "address",
+			  type = proxy.MYSQL_TYPE_STRING },
+			{ name = "state",
+			  type = proxy.MYSQL_TYPE_STRING },
+			{ name = "type",
+			  type = proxy.MYSQL_TYPE_STRING },
+			{ name = "uuid",
+			  type = proxy.MYSQL_TYPE_STRING },
+			{ name = "connected_clients", 
+			  type = proxy.MYSQL_TYPE_LONG },
+		}
+
+		for i = 1, #proxy.global.backends do
+			local states = {
+				"unknown",
+				"up",
+				"down"
+			}
+			local types = {
+				"unknown",
+				"rw",
+				"ro"
+			}
+			local b = proxy.global.backends[i]
+
+			rows[#rows + 1] = {
+				i,
+				b.dst.name,          -- configured backend address
+				states[b.state + 1], -- the C-id is pushed down starting at 0
+				types[b.type + 1],   -- the C-id is pushed down starting at 0
+				b.uuid,              -- the MySQL Server's UUID if it is managed
+				b.connected_clients  -- currently connected clients
+			}
+		end
+	elseif query:lower() == "select * from help" then
+		fields = { 
+			{ name = "command", 
+			  type = proxy.MYSQL_TYPE_STRING },
+			{ name = "description", 
+			  type = proxy.MYSQL_TYPE_STRING },
+		}
+		rows[#rows + 1] = { "SELECT * FROM help", "shows this help" }
+		rows[#rows + 1] = { "SELECT * FROM backends", "lists the backends and their state" }
+	else
+		set_error("use 'SELECT * FROM help' to see the supported commands")
+		return proxy.PROXY_SEND_RESULT
+	end
+
+	proxy.response = {
+		type = proxy.MYSQLD_PACKET_OK,
+		resultset = {
+			fields = fields,
+			rows = rows
+		}
+	}
+	return proxy.PROXY_SEND_RESULT
+end
+
+
+6、测试
+
+6.1 管理功能测试
+
+# mysql -uadmin -padmin -h172.16.100.107 --port=4041 
+
+Welcome to the MySQL monitor.  Commands end with ; or \g.
+Your MySQL connection id is 1
+Server version: 5.0.99-agent-admin
+
+Type 'help;' or '\h' for help. Type '\c' to clear the buffer.
+
+mysql> SELECT * FROM backends;
++-------------+-------------------+-------+------+------+-------------------+
+| backend_ndx | address           | state | type | uuid | connected_clients |
++-------------+-------------------+-------+------+------+-------------------+
+|           1 | 172.16.100.6:3306 | up    | rw   | NULL |                 0 | 
+|           2 | 172.16.100.7:3306 | up    | ro   | NULL |                 0 | 
++-------------+-------------------+-------+------+------+-------------------+
+2 rows in set (0.00 sec)
+
+6.2 读写分离测试
+
+# mysql -uroot -pmagedu.com -h172.16.100.107 --port=4040
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+下面的读写分享脚本是由mysql-proxy-0.8.3提供了，将其复制保存为/usr/lib/mysql-proxy/lua/proxy/rw-splitting.lua，就可以启动服务了。
+
+--[[ $%BEGINLICENSE%$
+ Copyright (c) 2007, 2012, Oracle and/or its affiliates. All rights reserved.
+
+ This program is free software; you can redistribute it and/or
+ modify it under the terms of the GNU General Public License as
+ published by the Free Software Foundation; version 2 of the
+ License.
+
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ GNU General Public License for more details.
+
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
+ 02110-1301  USA
+
+ $%ENDLICENSE%$ --]]
+
+---
+-- a flexible statement based load balancer with connection pooling
+--
+-- * build a connection pool of min_idle_connections for each backend and maintain
+--   its size
+-- * 
+-- 
+-- 
+
+local commands    = require("proxy.commands")
+local tokenizer   = require("proxy.tokenizer")
+local lb          = require("proxy.balance")
+local auto_config = require("proxy.auto-config")
+
+--- config
+--
+-- connection pool
+if not proxy.global.config.rwsplit then
+	proxy.global.config.rwsplit = {
+		min_idle_connections = 4,
+		max_idle_connections = 8,
+
+		is_debug = false
+	}
+end
+
+---
+-- read/write splitting sends all non-transactional SELECTs to the slaves
+--
+-- is_in_transaction tracks the state of the transactions
+local is_in_transaction       = false
+
+-- if this was a SELECT SQL_CALC_FOUND_ROWS ... stay on the same connections
+local is_in_select_calc_found_rows = false
+
+--- 
+-- get a connection to a backend
+--
+-- as long as we don't have enough connections in the pool, create new connections
+--
+function connect_server() 
+	local is_debug = proxy.global.config.rwsplit.is_debug
+	-- make sure that we connect to each backend at least ones to 
+	-- keep the connections to the servers alive
+	--
+	-- on read_query we can switch the backends again to another backend
+
+	if is_debug then
+		print()
+		print("[connect_server] " .. proxy.connection.client.src.name)
+	end
+
+	local rw_ndx = 0
+
+	-- init all backends 
+	for i = 1, #proxy.global.backends do
+		local s        = proxy.global.backends[i]
+		local pool     = s.pool -- we don't have a username yet, try to find a connections which is idling
+		local cur_idle = pool.users[""].cur_idle_connections
+
+		pool.min_idle_connections = proxy.global.config.rwsplit.min_idle_connections
+		pool.max_idle_connections = proxy.global.config.rwsplit.max_idle_connections
+		
+		if is_debug then
+			print("  [".. i .."].connected_clients = " .. s.connected_clients)
+			print("  [".. i .."].pool.cur_idle     = " .. cur_idle)
+			print("  [".. i .."].pool.max_idle     = " .. pool.max_idle_connections)
+			print("  [".. i .."].pool.min_idle     = " .. pool.min_idle_connections)
+			print("  [".. i .."].type = " .. s.type)
+			print("  [".. i .."].state = " .. s.state)
+		end
+
+		-- prefer connections to the master 
+		if s.type == proxy.BACKEND_TYPE_RW and
+		   s.state ~= proxy.BACKEND_STATE_DOWN and
+		   cur_idle < pool.min_idle_connections then
+			proxy.connection.backend_ndx = i
+			break
+		elseif s.type == proxy.BACKEND_TYPE_RO and
+		       s.state ~= proxy.BACKEND_STATE_DOWN and
+		       cur_idle < pool.min_idle_connections then
+			proxy.connection.backend_ndx = i
+			break
+		elseif s.type == proxy.BACKEND_TYPE_RW and
+		       s.state ~= proxy.BACKEND_STATE_DOWN and
+		       rw_ndx == 0 then
+			rw_ndx = i
+		end
+	end
+
+	if proxy.connection.backend_ndx == 0 then
+		if is_debug then
+			print("  [" .. rw_ndx .. "] taking master as default")
+		end
+		proxy.connection.backend_ndx = rw_ndx
+	end
+
+	-- pick a random backend
+	--
+	-- we someone have to skip DOWN backends
+
+	-- ok, did we got a backend ?
+
+	if proxy.connection.server then 
+		if is_debug then
+			print("  using pooled connection from: " .. proxy.connection.backend_ndx)
+		end
+
+		-- stay with it
+		return proxy.PROXY_IGNORE_RESULT
+	end
+
+	if is_debug then
+		print("  [" .. proxy.connection.backend_ndx .. "] idle-conns below min-idle")
+	end
+
+	-- open a new connection 
+end
+
+--- 
+-- put the successfully authed connection into the connection pool
+--
+-- @param auth the context information for the auth
+--
+-- auth.packet is the packet
+function read_auth_result( auth )
+	if is_debug then
+		print("[read_auth_result] " .. proxy.connection.client.src.name)
+	end
+	if auth.packet:byte() == proxy.MYSQLD_PACKET_OK then
+		-- auth was fine, disconnect from the server
+		proxy.connection.backend_ndx = 0
+	elseif auth.packet:byte() == proxy.MYSQLD_PACKET_EOF then
+		-- we received either a 
+		-- 
+		-- * MYSQLD_PACKET_ERR and the auth failed or
+		-- * MYSQLD_PACKET_EOF which means a OLD PASSWORD (4.0) was sent
+		print("(read_auth_result) ... not ok yet");
+	elseif auth.packet:byte() == proxy.MYSQLD_PACKET_ERR then
+		-- auth failed
+	end
+end
+
+
+--- 
+-- read/write splitting
+function read_query( packet )
+	local is_debug = proxy.global.config.rwsplit.is_debug
+	local cmd      = commands.parse(packet)
+	local c        = proxy.connection.client
+
+	local r = auto_config.handle(cmd)
+	if r then return r end
+
+	local tokens
+	local norm_query
+
+	-- looks like we have to forward this statement to a backend
+	if is_debug then
+		print("[read_query] " .. proxy.connection.client.src.name)
+		print("  current backend   = " .. proxy.connection.backend_ndx)
+		print("  client default db = " .. c.default_db)
+		print("  client username   = " .. c.username)
+		if cmd.type == proxy.COM_QUERY then 
+			print("  query             = "        .. cmd.query)
+		end
+	end
+
+	if cmd.type == proxy.COM_QUIT then
+		-- don't send COM_QUIT to the backend. We manage the connection
+		-- in all aspects.
+		proxy.response = {
+			type = proxy.MYSQLD_PACKET_OK,
+		}
+	
+		if is_debug then
+			print("  (QUIT) current backend   = " .. proxy.connection.backend_ndx)
+		end
+
+		return proxy.PROXY_SEND_RESULT
+	end
+	
+	-- COM_BINLOG_DUMP packet can't be balanced
+	--
+	-- so we must send it always to the master
+	if cmd.type == proxy.COM_BINLOG_DUMP then
+		-- if we don't have a backend selected, let's pick the master
+		--
+		if proxy.connection.backend_ndx == 0 then
+			proxy.connection.backend_ndx = lb.idle_failsafe_rw()
+		end
+
+		return
+	end
+
+	proxy.queries:append(1, packet, { resultset_is_needed = true })
+
+	-- read/write splitting 
+	--
+	-- send all non-transactional SELECTs to a slave
+	if not is_in_transaction and
+	   cmd.type == proxy.COM_QUERY then
+		tokens     = tokens or assert(tokenizer.tokenize(cmd.query))
+
+		local stmt = tokenizer.first_stmt_token(tokens)
+
+		if stmt.token_name == "TK_SQL_SELECT" then
+			is_in_select_calc_found_rows = false
+			local is_insert_id = false
+
+			for i = 1, #tokens do
+				local token = tokens[i]
+				-- SQL_CALC_FOUND_ROWS + FOUND_ROWS() have to be executed 
+				-- on the same connection
+				-- print("token: " .. token.token_name)
+				-- print("  val: " .. token.text)
+				
+				if not is_in_select_calc_found_rows and token.token_name == "TK_SQL_SQL_CALC_FOUND_ROWS" then
+					is_in_select_calc_found_rows = true
+				elseif not is_insert_id and token.token_name == "TK_LITERAL" then
+					local utext = token.text:upper()
+
+					if utext == "LAST_INSERT_ID" or
+					   utext == "@@INSERT_ID" then
+						is_insert_id = true
+					end
+				end
+
+				-- we found the two special token, we can't find more
+				if is_insert_id and is_in_select_calc_found_rows then
+					break
+				end
+			end
+
+			-- if we ask for the last-insert-id we have to ask it on the original 
+			-- connection
+			if not is_insert_id then
+				local backend_ndx = lb.idle_ro()
+
+				if backend_ndx > 0 then
+					proxy.connection.backend_ndx = backend_ndx
+				end
+			else
+				print("   found a SELECT LAST_INSERT_ID(), staying on the same backend")
+			end
+		end
+	end
+
+	-- no backend selected yet, pick a master
+	if proxy.connection.backend_ndx == 0 then
+		-- we don't have a backend right now
+		-- 
+		-- let's pick a master as a good default
+		--
+		proxy.connection.backend_ndx = lb.idle_failsafe_rw()
+	end
+
+	-- by now we should have a backend
+	--
+	-- in case the master is down, we have to close the client connections
+	-- otherwise we can go on
+	if proxy.connection.backend_ndx == 0 then
+		return proxy.PROXY_SEND_QUERY
+	end
+
+	local s = proxy.connection.server
+
+	-- if client and server db don't match, adjust the server-side 
+	--
+	-- skip it if we send a INIT_DB anyway
+	if cmd.type ~= proxy.COM_INIT_DB and 
+	   c.default_db and c.default_db ~= s.default_db then
+		print("    server default db: " .. s.default_db)
+		print("    client default db: " .. c.default_db)
+		print("    syncronizing")
+		proxy.queries:prepend(2, string.char(proxy.COM_INIT_DB) .. c.default_db, { resultset_is_needed = true })
+	end
+
+	-- send to master
+	if is_debug then
+		if proxy.connection.backend_ndx > 0 then
+			local b = proxy.global.backends[proxy.connection.backend_ndx]
+			print("  sending to backend : " .. b.dst.name);
+			print("    is_slave         : " .. tostring(b.type == proxy.BACKEND_TYPE_RO));
+			print("    server default db: " .. s.default_db)
+			print("    server username  : " .. s.username)
+		end
+		print("    in_trans        : " .. tostring(is_in_transaction))
+		print("    in_calc_found   : " .. tostring(is_in_select_calc_found_rows))
+		print("    COM_QUERY       : " .. tostring(cmd.type == proxy.COM_QUERY))
+	end
+
+	return proxy.PROXY_SEND_QUERY
+end
+
+---
+-- as long as we are in a transaction keep the connection
+-- otherwise release it so another client can use it
+function read_query_result( inj ) 
+	local is_debug = proxy.global.config.rwsplit.is_debug
+	local res      = assert(inj.resultset)
+  	local flags    = res.flags
+
+	if inj.id ~= 1 then
+		-- ignore the result of the USE <default_db>
+		-- the DB might not exist on the backend, what do do ?
+		--
+		if inj.id == 2 then
+			-- the injected INIT_DB failed as the slave doesn't have this DB
+			-- or doesn't have permissions to read from it
+			if res.query_status == proxy.MYSQLD_PACKET_ERR then
+				proxy.queries:reset()
+
+				proxy.response = {
+					type = proxy.MYSQLD_PACKET_ERR,
+					errmsg = "can't change DB ".. proxy.connection.client.default_db ..
+						" to on slave " .. proxy.global.backends[proxy.connection.backend_ndx].dst.name
+				}
+
+				return proxy.PROXY_SEND_RESULT
+			end
+		end
+		return proxy.PROXY_IGNORE_RESULT
+	end
+
+	is_in_transaction = flags.in_trans
+	local have_last_insert_id = (res.insert_id and (res.insert_id > 0))
+
+	if not is_in_transaction and 
+	   not is_in_select_calc_found_rows and
+	   not have_last_insert_id then
+		-- release the backend
+		proxy.connection.backend_ndx = 0
+	elseif is_debug then
+		print("(read_query_result) staying on the same backend")
+		print("    in_trans        : " .. tostring(is_in_transaction))
+		print("    in_calc_found   : " .. tostring(is_in_select_calc_found_rows))
+		print("    have_insert_id  : " .. tostring(have_last_insert_id))
+	end
+end
+
+--- 
+-- close the connections if we have enough connections in the pool
+--
+-- @return nil - close connection 
+--         IGNORE_RESULT - store connection in the pool
+function disconnect_client()
+	local is_debug = proxy.global.config.rwsplit.is_debug
+	if is_debug then
+		print("[disconnect_client] " .. proxy.connection.client.src.name)
+	end
+
+	-- make sure we are disconnection from the connection
+	-- to move the connection into the pool
+	proxy.connection.backend_ndx = 0
+end
+
+
+

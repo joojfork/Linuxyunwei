@@ -1,0 +1,367 @@
+
+前提：
+1）本配置共有三个测试节点，分别node1.magedu.com、node2.magedu.com和node3.magedu.com，相的IP地址分别为172.16.100.6、172.16.100.7和172.16.100.8；系统为rhel5.8 32bit；
+2）集群服务为apache的httpd服务；
+3）提供web服务的地址为172.16.100.1；
+4）为集群中的每个节点事先配置好yum源；
+5) 额外提供了主机172.16.100.100做为跳板机，以其为平台实现对集群中各节点的管理；其主机名称为stepping.magedu.com；
+
+一、准备工作
+
+为了配置一台Linux主机成为HA的节点，通常需要做出如下的准备工作：
+
+1.1 设定主机名称解析
+
+所有节点的主机名称和对应的IP地址解析服务可以正常工作，且每个节点的主机名称需要跟"uname -n“命令的结果保持一致；因此，需要保证三个节点上的/etc/hosts文件均为下面的内容：
+172.16.100.6   node1.magedu.com node1
+172.16.100.7   node2.magedu.com node2
+172.16.100.8   node3.magedu.com node3
+
+为了使得重新启动系统后仍能保持如上的主机名称，还分别需要在各节点执行类似如下的命令：
+
+Node1:
+# sed -i 's@\(HOSTNAME=\).*@\1node1.magedu.com@g'  /etc/sysconfig/network
+# hostname node1.magedu.com
+
+Node2：
+# sed -i 's@\(HOSTNAME=\).*@\1node2.magedu.com@g' /etc/sysconfig/network
+# hostname node2.magedu.com
+
+Node3:
+# sed -i 's@\(HOSTNAME=\).*@\1node3.magedu.com@g' /etc/sysconfig/network
+# hostname node3.magedu.com
+
+1.2 管理机设定
+
+后续的诸多设定，如rpm包安装、配置文件修改等都需要在三个节点上同时进行；为了便于实现此过程，我们这里提供了一台跳板机172.16.100.100，其可以以基于密钥认证的方式分别与三个节点进行通信。实际使用中，如果没有专用的跳板机，也可以以三个节点中的某节点来替代。
+
+首先让跳板机能以主机名称与各节点进行通信，此为非必须，仅为使用方便。在跳板机上建立/etc/hosts文件，内容如下：
+172.16.100.6   node1.magedu.com node1
+172.16.100.7   node2.magedu.com node2
+172.16.100.8   node3.magedu.com node3
+
+接着在跳板机上为ssh生成密钥：
+# ssh-keygen -t rsa -P '' 
+
+其次生成的密钥的公钥传输至集群中的每个节点：
+# ssh-copy-id -i ~/.ssh/id_rsa.pub root@node1
+# ssh-copy-id -i ~/.ssh/id_rsa.pub root@node2
+# ssh-copy-id -i ~/.ssh/id_rsa.pub root@node3
+
+说明：如果不想使用跳板机，后面演示过程中，但凡在跳板机上以循环方式执行的命令均可以分别在各节点执行的方式进行。
+
+二、集群安装
+
+RHCS的核心组件为cman和rgmanager，其中cman为基于openais的“集群基础架构层”，rgmanager为资源管理器。RHCS的集群中资源的配置需要修改其主配置文件/etc/cluster/cluster.xml实现，这对于很多用户来说是比较有挑战性的，因此，RHEL提供了system-config-cluster这个GUI工具，其仅安装在集群中的某一节点上即可，而cman和rgmanager需要分别安装在集群中的每个节点上。这里选择将此三个rpm包分别安装在了集群中的每个节点上，这可以在跳板机上执行如下命令实现：
+
+# for I in {1..3}; do ssh node$I 'yum -y install cman rgmanager system-config-cluster'; done
+
+三、集群配置及其启动
+
+3.1 为集群创建配置文件
+
+RHCS的配置文件/etc/cluster/cluster.conf，其在每个节点上都必须有一份，且内容均相同，其默认不存在，因此需要事先创建，ccs_tool命令可以完成此任务。另外，每个集群通过集群ID来标识自身，因此，在创建集群配置文件时需要为其选定一个集群名称，这里假设其为tcluster。此命令需要在集群中的某个节点上执行。
+
+# ccs_tool create tcluster
+
+查看生成的配置文件的内容：
+# cat /etc/cluster/cluster.conf
+<?xml version="1.0"?>
+<cluster name="tcluster" config_version="1">
+  <clusternodes/>
+  <fencedevices/>
+  <rm>
+    <failoverdomains/>
+    <resources/>
+  </rm>
+</cluster>
+
+ccs_tool命令用于在线更新CCS的配置文件，其有许多子命令，可以使用-h获取其使用帮助及每个子命令的使用帮助。
+
+3.2 为集群添加fence设备
+
+一个RHCS集群至少需要一个fence设备，正常环境中，可以选择将其配置到集群中来。这里为演示环境，没有可用的fence设备，因此，选择使用“manual fence”，即手动fence。创建fence设备也需要使用ccs_tool命令进行，其需要在集群中的某节点上执行，而且需要与前面创建集群配置文件时所执行的命令在同一个节点上进行。
+
+查看fence代理的名称，可以通过查看cman安装生成文件来实现。
+# rpm -ql cman | grep /sbin/fence
+/sbin/fence_ack_manual
+/sbin/fence_apc
+/sbin/fence_apc_snmp
+/sbin/fence_bladecenter
+/sbin/fence_brocade
+/sbin/fence_bullpap
+/sbin/fence_cisco_mds
+/sbin/fence_cisco_ucs
+/sbin/fence_drac
+/sbin/fence_drac5
+/sbin/fence_egenera
+/sbin/fence_ifmib
+/sbin/fence_ilo
+/sbin/fence_ilo_mp
+/sbin/fence_ipmilan
+/sbin/fence_lpar
+/sbin/fence_manual
+/sbin/fence_mcdata
+/sbin/fence_node
+/sbin/fence_rhevm
+/sbin/fence_rps10
+/sbin/fence_rsa
+/sbin/fence_rsb
+/sbin/fence_sanbox2
+/sbin/fence_scsi
+/sbin/fence_scsi_test
+/sbin/fence_tool
+/sbin/fence_virsh
+/sbin/fence_vixel
+/sbin/fence_vmware
+/sbin/fence_vmware_helper
+/sbin/fence_vmware_soap
+/sbin/fence_wti
+/sbin/fence_xvm
+/sbin/fence_xvmd
+/sbin/fenced
+
+这里为tcluster添加名为meatware的fence设备，其fence代理为fence-manual。
+# ccs_tool addfence meatware fence-manaual
+
+接着可以使用ccs_tool lsfence查看fence设备：
+# ccs_tool lsfence
+Name             Agent
+meatware         fence-manaual
+
+3.3 为集群添加节点
+
+RHCS集群需要配置好各节点及相关的fence设备后才能启动，因此，这里需要事先将各节点添加进集群配置文件。每个节点在添加进集群时，需要至少为其配置node id(每个节点的id必须惟一)及相关的fence设备两个属性。ccs_tool的addnode子命令可以完成节点添加。例如将前面规划的三个集群节点添加至集群中，可以使用如下命令实现。
+
+# ccs_tool addnode -n 1 -f meatware node1.magedu.com  
+# ccs_tool addnode -n 2 -f meatware node2.magedu.com 
+# ccs_tool addnode -n 3 -f meatware node3.magedu.com 
+
+查看已经添加完成的节点及相关信息：
+# ccs_tool lsnode
+
+Cluster name: tcluster, config_version: 5
+
+Nodename                        Votes Nodeid Fencetype
+node1.magedu.com                   1    1    meatware
+node2.magedu.com                   1    2    meatware
+node3.magedu.com                   1    3    meatware
+
+3.4 启动集群
+
+RHCS集群会等待各节点都启动后方才进入正常工作状态，因此，需要把集群各节点上的cman服务同时启动起来。这分别需要在各节点上执行如下命令。
+
+# /etc/rc.d/init.d/cman start
+
+查看服务监听的端口，以验正服务启动状况：
+# netstat -tunlp | grep -E "ccsd|aisexec"
+tcp        0      0 127.0.0.1:50006             0.0.0.0:*                   LISTEN      14544/ccsd          
+tcp        0      0 0.0.0.0:50008               0.0.0.0:*                   LISTEN      14544/ccsd          
+udp        0      0 172.16.100.6:5405           0.0.0.0:*                               14552/aisexec       
+udp        0      0 172.16.100.6:5149           0.0.0.0:*                               14552/aisexec       
+udp        0      0 239.192.110.162:5405        0.0.0.0:*                               14552/aisexec       
+udp        0      0 0.0.0.0:50007               0.0.0.0:*                               14544/ccsd 
+
+而后在各节点启动rgmanager服务，这可以在跳板机上执行如下命令实现：
+# for I in {1..3}; do ssh node$I '/etc/init.d/rgmanager start'; done
+
+3.5 查看集群状态信息
+
+clustat命令可用于显示集群成员信息、法定票数信息及服务相关信息。
+# clustat 
+Cluster Status for tcluster @ Mon May 13 12:06:53 2013
+Member Status: Quorate
+
+ Member Name                                                     ID   Status
+ ------ ----                                                     ---- ------
+ node1.magedu.com                                                    1 Online, Local
+ node2.magedu.com                                                    2 Online
+ node3.magedu.com                                                    3 Online
+
+cman_tool的status子命令则以当前节点为视角来显示集群的相关信息。
+# cman_tool status
+Version: 6.2.0
+Config Version: 5
+Cluster Name: tcluster
+Cluster Id: 28212
+Cluster Member: Yes
+Cluster Generation: 12
+Membership state: Cluster-Member
+Nodes: 3
+Expected votes: 3
+Total votes: 3
+Node votes: 1
+Quorum: 2  
+Active subsystems: 8
+Flags: Dirty 
+Ports Bound: 0 177  
+Node name: node1.magedu.com
+Node ID: 1
+Multicast addresses: 239.192.110.162 
+Node addresses: 172.16.100.6 
+
+cman_tool的nodes子命令则可以列出集群中每个节点的相关信息。
+# cman_tool nodes
+Node  Sts   Inc   Joined               Name
+   1   M      4   2013-05-13 12:00:09  node1.magedu.com
+   2   M      8   2013-05-13 12:00:28  node2.magedu.com
+   3   M     12   2013-05-13 12:00:39  node3.magedu.com
+
+cman_tool的nodes子命令则可以列出集群中每个服务的相关信息。 
+# cman_tool services
+type             level name       id       state       
+fence            0     default    00010001 none        
+[1 2 3]
+dlm              1     rgmanager  00020001 none        
+[1 2 3]
+
+四、配置集群服务
+
+配置集群服务涉及到配置故障转移域、服务及资源，这些需要手动修改集群配置文件，或使用system-config-cluster这个GUI程序完成。
+
+
+五、配置使用gfs2文件系统
+
+这里假设集群节点均已经正常登录某iscsi target，本地正常映射了磁盘/dev/sdb，且创建分区/dev/sdb1和/dev/sdb2。
+
+5.1 在集群节点上安装gfs2-utils
+
+以下命令在跳板机上执行，实现在集群所有节点上统一部署安装gfs2-utils并启动gfs2的服务
+
+# for I in {1..3}; do ssh node$I 'yum -y install gfs2-utils; service gfs2 start'; done
+
+在集群中的某节点上执行如下命令，查看gfs2模块的装载情况：
+
+# lsmod  | grep gfs
+gfs2                  354825  1 lock_dlm
+configfs               28625  2 dlm
+
+5.2 gfs2相关命令行工具的使用
+
+mkfs.gfs2为gfs2文件系统创建工具，其一般常用的选项有：
+
+-b BlockSize：指定文件系统块大小，最小为512，默认为4096；
+-J MegaBytes：指定gfs2日志区域大小，默认为128MB，最小值为8MB；
+-j Number：指定创建gfs2文件系统时所创建的日志区域个数，一般需要为每个挂载的客户端指定一个日志区域；
+-p LockProtoName：所使用的锁协议名称，通常为lock_dlm或lock_nolock之一；
+-t LockTableName：锁表名称，一般来说一个集群文件系统需一个锁表名以便让集群节点在施加文件锁时得悉其所关联到的集群文件系统，锁表名称为clustername:fsname，其中的clustername必须跟集群配置文件中的集群名称保持一致，因此，也仅有此集群内的节点可访问此集群文件系统；此外，同一个集群内，每个文件系统的名称必须惟一；
+
+因此，若要在前面的/dev/sdb1上创建集群文件系统gfs2，可以使用如下命令：
+# mkfs.gfs2 -j 3 -p lock_dlm -t tcluster:sdb1 /dev/sdb1
+
+六、配置使用cLVM(集群逻辑卷)
+
+在RHCS集群节点上安装lvm2-cluster:
+# for I in {1..3}; do ssh node$I 'yum -y install lvm2-cluster;'; done
+
+在RHCS的各节点上，为lvm启用集群功能：
+# for I in {1..3}; do ssh node$I 'lvmconf --enable-cluster'; done
+
+而后，为RHCS各节点启动clvmd服务：
+# for I in {1..3}; do ssh node$I 'service clvmd start'; done
+
+如果需要创建物理卷、卷组和逻辑卷，使用管理单机逻辑卷的相关命令即可；比如，将/dev/sdb2创建为物理卷：
+# pvcreate /dev/sdb2
+# pvs
+
+此时，在另外的其它节点上也能够看到刚刚创建的物理卷。
+
+创建卷组和逻辑卷：
+# vgcreate clustervg /dev/sdb2
+# lvcreate -L 2G -n clusterlv clustervg
+
+七、gfs2的其它管理工具
+
+7.1 gfs2-tool
+
+查看挂载至/mydata目录上的某gfs2文件系统上的日志相关信息：
+# gfs2-tool journals /mydata
+
+7.2 gfs2-jadd
+
+为挂载至/mydata的gfs2文件系统添加新的日志区域：
+# gfs2_jadd -j 1 /mydata
+
+7.3 gfs2-grow
+
+如果需要扩展逻辑卷，其方式与普通逻辑卷相同，只是gfs2文件系统的扩展，则需要gfs2_grow进行，其需要以挂载点为参数：
+
+# gfs2-grow /mydata
+
+7.4 gfs2-tool gettune
+
+
+
+
+
+
+
+
+附：
+
+Red Hat Resource Group Manager provides high availability of critical server applications in the event of planned or unplanned system downtime.
+
+创建一个GFS文件系统：
+需要提供的信息：
+1、锁类型：
+	lock_nolock
+	lock_dlm
+2、锁文件的名字，通常即文件系统名
+	cluster_name:fs_name
+3、日志的个数，通常一个节点对应一个日志文件，但建议提供比节点数更多的日志数目，以提供冗余；
+4、日志文件大小
+5、文件系统大小
+
+Syntax: gfs_mkfs -p lock_dlm -t ClusterName:FSName -j Number -b block_size -J journal_size BlockDevice
+
+如：
+# gfs_mkfs -p lock_dlm -t gfscluster:gfslv -j 5 /dev/vg0/gfslv
+	
+可以通过其对应挂载点查看gfs文件系统属性信息；
+# gfs_tool df /mount_point
+
+
+
+
+挂载GFS文件系统：
+mount -o StdMountOpts,GFSOptions -t gfs DEVICE MOUNTPOINT
+
+前提：挂载GFS文件的主机必须是对应集群中的节点；
+
+挂载GFS文件时有如下常用选项可用：
+lockproto=[locl_dlm,lock_nolock]
+locktable=clustername:fsname
+upgrade # GFS版本升级时有用
+acl
+
+如果不想每一次启用GFS时都得指定某选项，也可以通过类似如下命令为其一次性指定:
+# gfs_tool margs "lockproto=lock_dlm,acl"
+
+
+
+载入相应的gfs模块，并查看lv是否成功
+
+# modprobe gfs
+# modprobe gfs2
+# chkconfig gfs on
+# chkconfig gfs2 on
+
+# chkconfig clvmd on
+
+# /etc/init.d/gfs restart
+# /etc/init.d/gfs2 restart
+# /etc/init.d/clvmd restart
+
+# lvscan
+
+
+lvmconf --enale-cluster
+
+
+配置故障切换域
+故障切换域是一个命名的集群节点子集，它可在节点失败事件中运行集群服务。故障切换域有以下特征：
+无限制 — 允许您为在子集指定首选成员子集，但分配给这个域名的集群服务可在任意可用成员中运行。
+限制 — 允许您限制可运行具体集群服务的成员。如果在限制故障切换域中没有可用成员，则无法启动集群服务（手动或者使用集群软件均不可行）。
+无序 — 当将一个集群服务分配给一个无序故障切换域时，则可从可用故障切换域成员中随机选择运行集群服务的成员，没有优先顺序。
+有序的 — 可让您在故障切换域的成员间指定顺序。该列表顶端的成员是首选成员，接下来是列表中的第二个成员，依此类推。
+故障恢复 — 允许您指定在故障切换域中的服务是否应该恢复到节点失败前最初运行的节点。配置这个特性在作为有序故障切换域一部分节点重复失败的环境中很有帮助。在那种情况下，如果某个节点是故障切换域中的首选节点，在可能在首选节点和其它节点间重复切换和恢复某个服务，从而不会对性能产生严重影响。

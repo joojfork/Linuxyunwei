@@ -1,0 +1,513 @@
+
+LAN客户端判定哪个路由器应该为其到达目标主机的下一跳网关的方式有动态及静态决策两种方式，其中，觉的动态路由发现方式有如下几种：
+1、Proxy ARP —— 客户端使用ARP协议获取其想要到达的目标，而后，由某路由以其MAC地址响应此ARP请求；
+2、Routing Protocol —— 客户端监听动态路由更新(如通过RIP或OSPF协议)并以之重建自己的路由表；
+3、ICMP IRDP (Router Discovery Protocol) 客户端 —— 客户端主机运行一个ICMP路由发现客户端程序；
+
+动态路由发现协议的不足之处在于它会导致在客户端引起一定的配置和处理方面的开销，并且，如果路由器故障，切换至其它路由器的过程会比较慢。解决此类问题的一个方案是为客户端静态配置默认路由设备，这大大简化了客户端的处理过程，但也会带来单点故障类的问题。默认网关故障时，LAN客户端仅能实现本地通信。
+
+VRRP可以通过在一组路由器(一个VRRP组)之间共享一个虚拟IP(VIP)解决静态配置的问题，此时仅需要客户端以VIP作为其默认网关即可。
+
+图1显示了一个基本的VLAN拓扑，其中，Router A、B、C共同组成一个VRRP组，其VIP为10.0.0.1，配置在路由器A的物理接口上，因此A为master路由器，B和C为backup路由器。VRRP组中，master(路由器A)负责负责转发发往VIP地址的报文，客户端1、2、3都以此VIP作为其默认网关。一旦master故障，backup路由器B和C中具有最高优先级的路由器将成为master并接管VIP地址，而当原来的master路由器A重新上线时，其将重新成为master路由器。
+
+VRRP是一个“选举”协议，它能够动态地将一个虚拟路由器的责任指定至同一个VRRP组中的其它路由器上，从而消除了静态路由配置的单点故障。
+
+
+
+VRRP术语：
+
+VRRP虚拟路由(VRRP router)：
+
+
+
+VRRP的优势：
+
+冗余：可以使用多个路由器设备作为LAN客户端的默认网关，大大降低了默认网关成为单点故障的可能性；
+负载共享：允许来自LAN客户端的流量由多个路由器设备所共享；
+多VRRP组：在一个路由器物理接口上可配置多达255个VRRP组；
+多IP地址：基于接口别名在同一个物理接口上配置多个IP地址，从而支持在同一个物理接口上接入多个子网；
+抢占：在master故障时允许优先级更高的backup成为master；
+通告协议：使用IANA所指定的组播地址224.0.0.18进行VRRP通告；
+VRRP追踪：基于接口状态来改变其VRRP优先级来确定最佳的VRRP路由器成为master；
+
+
+
+
+
+配置keepalived为实现haproxy高可用的配置文件示例：
+
+! Configuration File for keepalived  
+  
+global_defs {  
+   notification_email {  
+         linuxedu@foxmail.com
+         mageedu@126.com  
+   }  
+   notification_email_from kanotify@magedu.com 
+   smtp_connect_timeout 3  
+   smtp_server 127.0.0.1  
+   router_id LVS_DEVEL  
+}  
+
+vrrp_script chk_haproxy {  
+    script "killall -0 haproxy"  
+    interval 1  
+    weight 2  
+}  
+
+vrrp_script chk_mantaince_down {
+   script "[[ -f /etc/keepalived/down ]] && exit 1 || exit 0"
+   interval 1
+   weight 2
+}
+
+vrrp_instance VI_1 {  
+    interface eth0  
+    state MASTER  # BACKUP for slave routers
+    priority 101  # 100 for BACKUP
+    virtual_router_id 51 
+    garp_master_delay 1 
+  
+    authentication {  
+        auth_type PASS  
+        auth_pass password  
+    }  
+    track_interface {  
+       eth0    
+    }  
+    virtual_ipaddress {  
+        172.16.100.1/16 dev eth0 label eth0:0 
+    }  
+    track_script {  
+        chk_haproxy  
+        chk_mantaince_down
+    }  
+  
+ 
+    notify_master "/etc/keepalived/notify.sh master"  
+    notify_backup "/etc/keepalived/notify.sh backup"  
+    notify_fault "/etc/keepalived/notify.sh fault"  
+} 
+
+
+注意：
+1、上面的state为当前节点的起始状态，通常在master/slave的双节点模型中，其一个默认为MASTER，而别一个默认为BACKUP。
+2、priority为当关节点在当前虚拟路由器中的优先级，master的优先级应该大于slave的；
+
+
+下面是一个notify.sh脚本的简单示例：
+#!/bin/bash
+# Author: MageEdu <linuxedu@foxmail.com>
+# description: An example of notify script
+# 
+
+vip=172.16.100.1
+contact='root@localhost'
+
+Notify() {
+    mailsubject="`hostname` to be $1: $vip floating"
+    mailbody="`date '+%F %H:%M:%S'`: vrrp transition, `hostname` changed to be $1"
+    echo $mailbody | mail -s "$mailsubject" $contact
+}
+
+case "$1" in
+    master)
+        notify master
+        /etc/rc.d/init.d/haproxy start
+        exit 0
+    ;;
+    backup)
+        notify backup
+        /etc/rc.d/init.d/haproxy restart
+        exit 0
+    ;;
+    fault)
+        notify fault
+        exit 0
+    ;;
+    *)
+        echo 'Usage: `basename $0` {master|backup|fault}'
+        exit 1
+    ;;
+esac
+
+
+
+
+配置keepalived为实现haproxy高可用的双主模型配置文件示例：
+
+说明：其基本实现思想为创建两个虚拟路由器，并以两个节点互为主从。
+
+! Configuration File for keepalived  
+  
+global_defs {  
+   notification_email {  
+         linuxedu@foxmail.com
+         mageedu@126.com  
+   }  
+   notification_email_from kanotify@magedu.com 
+   smtp_connect_timeout 3  
+   smtp_server 127.0.0.1  
+   router_id LVS_DEVEL  
+}  
+
+vrrp_script chk_haproxy {  
+    script "killall -0 haproxy"  
+    interval 1  
+    weight 2  
+}  
+
+vrrp_script chk_mantaince_down {
+   script "[[ -f /etc/keepalived/down ]] && exit 1 || exit 0"
+   interval 1
+   weight 2
+}
+
+vrrp_instance VI_1 {  
+    interface eth0  
+    state MASTER  # BACKUP for slave routers
+    priority 101  # 100 for BACKUP
+    virtual_router_id 51 
+    garp_master_delay 1 
+  
+    authentication {  
+        auth_type PASS  
+        auth_pass password  
+    }  
+    track_interface {  
+       eth0    
+    }  
+    virtual_ipaddress {  
+        172.16.100.1/16 dev eth0 label eth0:0 
+    }  
+    track_script {  
+        chk_haproxy  
+        chk_mantaince_down
+    }  
+  
+ 
+    notify_master "/etc/keepalived/notify.sh master"  
+    notify_backup "/etc/keepalived/notify.sh backup"  
+    notify_fault "/etc/keepalived/notify.sh fault"  
+} 
+
+vrrp_instance VI_2 {  
+    interface eth0  
+    state BACKUP  # BACKUP for slave routers
+    priority 100  # 100 for BACKUP
+    virtual_router_id 52
+    garp_master_delay 1 
+  
+    authentication {  
+        auth_type PASS  
+        auth_pass password  
+    }  
+    track_interface {  
+       eth0    
+    }  
+    virtual_ipaddress {  
+        172.16.100.2/16 dev eth0 label eth0:1
+    }  
+    track_script {  
+        chk_haproxy  
+        chk_mantaince_down
+    }    
+}
+
+
+说明：
+1、对于VI_1和VI_2来说，两个节点要互为主从关系；
+
+
+
+
+
+
+
+
+
+
+
+LVS + keepalived的实现：
+
+! Configuration File for keepalived  
+  
+global_defs {  
+   notification_email {  
+         linuxedu@foxmail.com
+         mageedu@126.com  
+   }  
+   notification_email_from kanotify@magedu.com 
+   smtp_connect_timeout 3  
+   smtp_server 127.0.0.1  
+   router_id LVS_DEVEL  
+}  
+
+vrrp_script chk_schedown {
+   script "[[ -f /etc/keepalived/down ]] && exit 1 || exit 0"
+   interval 2
+   weight -2
+}
+
+vrrp_instance VI_1 {  
+    interface eth0  
+    state MASTER  
+    priority 101
+    virtual_router_id 51 
+    garp_master_delay 1 
+ 
+    authentication {  
+        auth_type PASS  
+        auth_pass password  
+    }  
+
+    track_interface {  
+       eth0    
+    }  
+
+    virtual_ipaddress {  
+        172.16.100.1/16 dev eth0 label eth0:0
+    }  
+
+    track_script {  
+        chk_schedown
+    }    
+} 
+
+
+virtual_server 172.16.100.1 80 {
+    delay_loop 6
+    lb_algo rr 
+    lb_kind DR
+    persistence_timeout 50
+    protocol TCP
+
+#    sorry_server 192.168.200.200 1358
+
+    real_server 172.16.100.11 80 {
+        weight 1
+        HTTP_GET {
+            url { 
+              path /
+              status_code 200
+            }
+            connect_timeout 3
+            nb_get_retry 3
+            delay_before_retry 3
+        }
+    }
+
+    real_server 172.16.100.12 80 {
+        weight 1
+        HTTP_GET {
+            url { 
+              path /
+              status_code 200
+            }
+            connect_timeout 3
+            nb_get_retry 3
+            delay_before_retry 3
+        }
+    }
+}
+
+
+如果要使用TCP_CHECK检测各realserver的健康状态，那么，上面关于realserver部分的定义也可以替换为如下内容：
+virtual_server 172.16.100.1 80 {
+    delay_loop 6
+    lb_algo rr 
+    lb_kind DR
+    persistence_timeout 300
+    protocol TCP
+
+    sorry_server 127.0.0.1 80
+
+    real_server 172.16.100.11 80 {
+        weight 1
+        TCP_CHECK {
+	    	tcp_port 80
+            connect_timeout 3
+        }
+    }
+
+    real_server 172.16.100.12 80 {
+        weight 1
+        TCP_CHECK {
+	    	connect_port 80
+            connect_timeout 3
+          }
+    }
+}
+
+说明：其中的sorry_server是用于定义所有realserver均出现故障时所用的服务器。
+
+
+
+
+
+
+
+
+
+
+keepalived通知脚本进阶示例：
+
+下面的脚本可以接受选项，其中：
+-s, --service SERVICE,...：指定服务脚本名称，当状态切换时可自动启动、重启或关闭此服务；
+-a, --address VIP: 指定相关虚拟路由器的VIP地址；
+-m, --mode {mm|mb}：指定虚拟路由的模型，mm表示主主，mb表示主备；它们表示相对于同一种服务而方，其VIP的工作类型；
+-n, --notify {master|backup|fault}：指定通知的类型，即vrrp角色切换的目标角色；
+-h, --help：获取脚本的使用帮助；
+
+#!/bin/bash
+# Author: MageEdu <linuxedu@foxmail.com>
+# description: An example of notify script
+# Usage: notify.sh -m|--mode {mm|mb} -s|--service SERVICE1,... -a|--address VIP  -n|--notify {master|backup|falut} -h|--help 
+
+#contact='linuxedu@foxmail.com'
+helpflag=0
+serviceflag=0
+modeflag=0
+addressflag=0
+notifyflag=0
+
+contact='root@localhost'
+
+Usage() {
+  echo "Usage: notify.sh [-m|--mode {mm|mb}] [-s|--service SERVICE1,...] <-a|--address VIP>  <-n|--notify {master|backup|falut}>" 
+  echo "Usage: notify.sh -h|--help"
+}
+
+ParseOptions() {
+  local I=1;
+  if [ $# -gt 0 ]; then
+    while [ $I -le $# ]; do
+      case $1 in
+	  -s|--service)
+		[ $# -lt 2 ] && return 3
+ 	    serviceflag=1
+ 		services=(`echo $2|awk -F"," '{for(i=1;i<=NF;i++) print $i}'`)
+		shift 2 ;;
+	  -h|--help)
+ 		helpflag=1
+		return 0
+        shift
+		;;
+	  -a|--address)
+		[ $# -lt 2 ] && return 3
+	    addressflag=1
+		vip=$2
+		shift 2
+		;;
+	  -m|--mode)
+		[ $# -lt 2 ] && return 3
+		mode=$2
+		shift 2
+		;;
+	  -n|--notify)
+		[ $# -lt 2 ] && return 3
+		notifyflag=1
+		notify=$2
+		shift 2
+		;;
+	  *)
+		echo "Wrong options..."
+		Usage
+		return 7
+		;;
+       esac
+    done
+    return 0
+  fi
+}
+
+#workspace=$(dirname $0)
+
+RestartService() {
+  if [ ${#@} -gt 0 ]; then
+    for I in $@; do
+      if [ -x /etc/rc.d/init.d/$I ]; then
+        /etc/rc.d/init.d/$I restart
+      else
+        echo "$I is not a valid service..."
+      fi
+    done
+  fi
+}
+
+StopService() {
+  if [ ${#@} -gt 0 ]; then
+    for I in $@; do
+      if [ -x /etc/rc.d/init.d/$I ]; then
+        /etc/rc.d/init.d/$I stop
+      else
+        echo "$I is not a valid service..."
+      fi
+    done
+  fi
+}
+
+
+Notify() {
+    mailsubject="`hostname` to be $1: $vip floating"
+    mailbody="`date '+%F %H:%M:%S'`, vrrp transition, `hostname` changed to be $1."
+    echo $mailbody | mail -s "$mailsubject" $contact
+}
+
+
+# Main Function
+ParseOptions $@
+[ $? -ne 0 ] && Usage && exit 5
+
+[ $helpflag -eq 1 ] && Usage && exit 0
+
+if [ $addressflag -ne 1 -o $notifyflag -ne 1 ]; then
+  Usage
+  exit 2
+fi
+
+mode=${mode:-mb}
+
+case $notify in
+'master')
+  if [ $serviceflag -eq 1 ]; then
+      RestartService ${services[*]}
+  fi
+  Notify master
+  ;;
+'backup')
+  if [ $serviceflag -eq 1 ]; then
+    if [ "$mode" == 'mb' ]; then
+      StopService ${services[*]}
+    else
+      RestartService ${services[*]}
+    fi
+  fi
+  Notify backup
+  ;;
+'fault')
+  Notify fault
+  ;;
+*)
+  Usage
+  exit 4
+  ;;
+esac
+
+
+
+在keepalived.conf配置文件中，其调用方法如下所示：
+    notify_master "/etc/keepalived/notify.sh -n master -a 172.16.100.1"  
+    notify_backup "/etc/keepalived/notify.sh -n backup -a 172.16.100.1"  
+    notify_fault "/etc/keepalived/notify.sh -n fault -a 172.16.100.1"  
+
+
+
+
+
+
+
+
+
+
+

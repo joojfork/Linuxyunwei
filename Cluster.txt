@@ -1,0 +1,1281 @@
+
+LVS:
+
+类型：
+	NAT：地址转换
+	DR: 直接路由
+	TUN：隧道
+
+	NAT:
+		集群节点跟director必须在同一个IP网络中；
+		RIP通常是私有地址，仅用于各集群节点间的通信；
+		director位于client和real server之间，并负责处理进出的所有通信；
+		realserver必须将网关指向DIP；
+		支持端口映射；
+		realserver可以使用任意OS；
+		较大规模应该场景中，director易成为系统瓶颈；
+
+	DR: 
+		集群节点跟director必须在同一个物理网络中；
+		RIP可以使用公网地址，实现便捷的远程管理和监控；
+		director仅负责处理入站请求，响应报文则由realserver直接发往客户端；
+		realserver不能将网关指向DIP；
+		不支持端口映射；
+
+	TUN：
+		集群节点可以跨越Internet；
+		RIP必须是公网地址；
+		director仅负责处理入站请求，响应报文则由realserver直接发往客户端；
+		realserver网关不能指向director；
+		只有支持隧道功能的OS才能用于realserver；
+		不支持端口映射；
+
+
+知识回顾：
+	LB：
+	HA：
+	HP：
+
+LB：
+	Hardware:
+		F5 BIG-IP 
+		Citrix NetScaler
+		A10
+	Software
+		四层：
+			LVS
+		七层：
+			nginx
+			haproxy
+
+LVS: Linux Virtual Server
+
+Type:
+	NAT:
+		类似DNAT
+	DR:
+
+	TUN:
+
+
+
+固定调度
+	rr: 轮叫，轮询
+	wrr: Weight, 加权
+	sh: source hash, 源地址hash
+
+
+动态调度
+
+
+
+
+
+
+http stateless
+
+
+
+四种静态：
+	rr:
+	wrr:
+	dh: 
+	sh:
+
+动态调度方法：
+	lc: 最少连接
+		active*256+inactive
+		谁的小，挑谁
+	wlc: 加权最少连接
+		(active*256+inactive)/weight
+	sed: 最短期望延迟
+		（active+1)*256/weight
+	nq: never queue
+	LBLC: 基于本地的最少连接
+		DH: 
+	LBLCR: 基于本地的带复制功能的最少连接
+
+
+默认方法：wlc
+
+ipvsadm：
+	管理集群服务
+		添加：-A -t|u|f service-address [-s scheduler]
+			-t: TCP协议的集群 
+			-u: UDP协议的集群
+				service-address:     IP:PORT
+			-f: FWM: 防火墙标记 
+				service-address: Mark Number
+		修改：-E
+		删除：-D -t|u|f service-address
+
+		# ipvsadm -A -t 172.16.100.1:80 -s rr
+
+	管理集群服务中的RS
+		添加：-a -t|u|f service-address -r server-address [-g|i|m] [-w weight]
+			-t|u|f service-address：事先定义好的某集群服务
+			-r server-address: 某RS的地址，在NAT模型中，可使用IP：PORT实现端口映射；
+			[-g|i|m]: LVS类型	
+				-g: DR
+				-i: TUN
+				-m: NAT
+			[-w weight]: 定义服务器权重
+		修改：-e
+		删除：-d -t|u|f service-address -r server-address
+
+		# ipvsadm -a -t 172.16.100.1:80 -r 192.168.10.8 -m 
+		# ipvsadm -a -t 172.16.100.1:80 -r 192.168.10.9 -m
+	查看
+		-L|l
+			-n: 数字格式显示主机地址和端口
+			--stats：统计数据
+			--rate: 速率
+			--timeout: 显示tcp、tcpfin和udp的会话超时时长
+			-c: 显示当前的ipvs连接状况
+
+	删除所有集群服务
+		-C：清空ipvs规则
+	保存规则
+		-S 
+		# ipvsadm -S > /path/to/somefile
+	载入此前的规则：
+		-R
+		# ipvsadm -R < /path/form/somefile
+
+
+各节点之间的时间偏差不应该超出1秒钟；
+
+NTP：Network Time Protocol
+
+
+
+LVS:
+	Type:
+		NAT: -m
+		DR: -g
+		TUN: -i
+
+	scheduler method:
+		静态：
+			rr
+			wrr
+			sh
+			dh
+		动态：
+			lc
+			wlc
+			sed
+			nq
+			lblc
+			lblcr
+
+LVS: ipvsadm/ipvs
+	INPUT: -->POSTRUTING
+
+	ipvsadm:
+		管理服务：
+			-A
+			-E
+			-D
+		管理RS:
+			-a
+			-e
+			-d
+		查看:
+			-L|-l
+				-n
+				--stats
+				--rate
+				--timeout
+				--sort
+				--daemon
+		规则管理:
+			-C
+			-S
+			-R
+
+DR: 	
+	
+	VIP: MAC(DVIP)
+	arptables：
+	kernel parameter:
+		arp_ignore: 定义接收到ARP请求时的响应级别；
+			0：只要本地配置的有相应地址，就给予响应；
+			1：仅在请求的目标地址配置请求到达的接口上的时候，才给予响应；
+
+		arp_announce：定义将自己地址向外通告时的通告级别；
+			0：将本地任何接口上的任何地址向外通告；
+			1：试图仅向目标网络通告与其网络匹配的地址；
+			2：仅向与本地接口上地址匹配的网络进行通告；
+
+
+
+service ipvsadm save
+ipvsadm -S
+
+VIP, 路由
+
+RS：
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+DR类型中，Director和RealServer的配置脚本示例：
+
+Director脚本:
+#!/bin/bash
+#
+# LVS script for VS/DR
+# chkconfig: - 90 10
+#
+. /etc/rc.d/init.d/functions
+#
+VIP=172.16.100.1
+DIP=172.16.100.2
+RIP1=172.16.100.7
+RIP2=172.16.100.8
+PORT=80
+RSWEIGHT1=2
+RSWEIGHT2=5
+
+#
+case "$1" in
+start)           
+
+  /sbin/ifconfig eth0:1 $VIP broadcast $VIP netmask 255.255.255.255 up
+  /sbin/route add -host $VIP dev eth0:0
+
+# Since this is the Director we must be able to forward packets
+  echo 1 > /proc/sys/net/ipv4/ip_forward
+
+# Clear all iptables rules.
+  /sbin/iptables -F
+
+# Reset iptables counters.
+  /sbin/iptables -Z
+
+# Clear all ipvsadm rules/services.
+  /sbin/ipvsadm -C
+
+# Add an IP virtual service for VIP 192.168.0.219 port 80
+# In this recipe, we will use the round-robin scheduling method. 
+# In production, however, you should use a weighted, dynamic scheduling method. 
+  /sbin/ipvsadm -A -t $VIP:80 -s wlc
+
+# Now direct packets for this VIP to
+# the real server IP (RIP) inside the cluster
+  /sbin/ipvsadm -a -t $VIP:80 -r $RIP1 -g -w $RSWEIGHT1
+  /sbin/ipvsadm -a -t $VIP:80 -r $RIP2 -g -w $RSWEIGHT2
+
+  /bin/touch /var/lock/subsys/ipvsadm &> /dev/null
+;; 
+
+stop)
+# Stop forwarding packets
+  echo 0 > /proc/sys/net/ipv4/ip_forward
+
+# Reset ipvsadm
+  /sbin/ipvsadm -C
+
+# Bring down the VIP interface
+  /sbin/ifconfig eth0:0 down
+  /sbin/route del $VIP
+  
+  /bin/rm -f /var/lock/subsys/ipvsadm
+  
+  echo "ipvs is stopped..."
+;;
+
+status)
+  if [ ! -e /var/lock/subsys/ipvsadm ]; then
+    echo "ipvsadm is stopped ..."
+  else
+    echo "ipvs is running ..."
+    ipvsadm -L -n
+  fi
+;;
+*)
+  echo "Usage: $0 {start|stop|status}"
+;;
+esac
+
+
+RealServer脚本:
+
+#!/bin/bash
+#
+# Script to start LVS DR real server.
+# chkconfig: - 90 10
+# description: LVS DR real server
+#
+.  /etc/rc.d/init.d/functions
+
+VIP=172.16.100.1
+
+host=`/bin/hostname`
+
+case "$1" in
+start)
+       # Start LVS-DR real server on this machine.
+        /sbin/ifconfig lo down
+        /sbin/ifconfig lo up
+        echo 1 > /proc/sys/net/ipv4/conf/lo/arp_ignore
+        echo 2 > /proc/sys/net/ipv4/conf/lo/arp_announce
+        echo 1 > /proc/sys/net/ipv4/conf/all/arp_ignore
+        echo 2 > /proc/sys/net/ipv4/conf/all/arp_announce
+
+        /sbin/ifconfig lo:0 $VIP broadcast $VIP netmask 255.255.255.255 up
+        /sbin/route add -host $VIP dev lo:0
+
+;;
+stop)
+
+        # Stop LVS-DR real server loopback device(s).
+        /sbin/ifconfig lo:0 down
+        echo 0 > /proc/sys/net/ipv4/conf/lo/arp_ignore
+        echo 0 > /proc/sys/net/ipv4/conf/lo/arp_announce
+        echo 0 > /proc/sys/net/ipv4/conf/all/arp_ignore
+        echo 0 > /proc/sys/net/ipv4/conf/all/arp_announce
+
+;;
+status)
+
+        # Status of LVS-DR real server.
+        islothere=`/sbin/ifconfig lo:0 | grep $VIP`
+        isrothere=`netstat -rn | grep "lo:0" | grep $VIP`
+        if [ ! "$islothere" -o ! "isrothere" ];then
+            # Either the route or the lo:0 device
+            # not found.
+            echo "LVS-DR real server Stopped."
+        else
+            echo "LVS-DR real server Running."
+        fi
+;;
+*)
+            # Invalid entry.
+            echo "$0: Usage: $0 {start|status|stop}"
+            exit 1
+;;
+esac
+
+
+
+curl命令选项：
+	--cacert <file> CA证书 (SSL)
+	--capath <directory> CA目录 (made using c_rehash) to verify peer against (SSL)
+	--compressed 要求返回是压缩的形势 (using deflate or gzip)
+	--connect-timeout <seconds> 设置最大请求时间
+	-H/--header <line>自定义头信息传递给服务器
+	-i/--include 输出时包括protocol头信息
+	-I/--head 只显示文档信息
+	--interface <interface> 使用指定网络接口/地址
+	-s/--silent静音模式。不输出任何东西
+	-u/--user <user[:password]>设置服务器的用户和密码
+	-p/--proxytunnel 使用HTTP代理
+
+
+RS健康状态检查脚本示例第一版：
+#!/bin/bash
+#
+VIP=192.168.10.3
+CPORT=80
+FAIL_BACK=127.0.0.1
+FBSTATUS=0
+RS=("192.168.10.7" "192.168.10.8")
+RSTATUS=("1" "1")
+RW=("2" "1")
+RPORT=80
+TYPE=g
+
+add() {
+  ipvsadm -a -t $VIP:$CPORT -r $1:$RPORT -$TYPE -w $2
+  [ $? -eq 0 ] && return 0 || return 1
+}
+
+del() {
+  ipvsadm -d -t $VIP:$CPORT -r $1:$RPORT
+  [ $? -eq 0 ] && return 0 || return 1
+}
+
+while :; do
+  let COUNT=0
+  for I in ${RS[*]}; do
+    if curl --connect-timeout 1 http://$I &> /dev/null; then
+      if [ ${RSTATUS[$COUNT]} -eq 0 ]; then
+         add $I ${RW[$COUNT]}
+         [ $? -eq 0 ] && RSTATUS[$COUNT]=1
+      fi
+    else
+      if [ ${RSTATUS[$COUNT]} -eq 1 ]; then
+         del $I
+         [ $? -eq 0 ] && RSTATUS[$COUNT]=0
+      fi
+    fi
+    let COUNT++
+  done
+  sleep 5
+done
+
+
+RS健康状态检查脚本示例第二版：
+#!/bin/bash
+#
+VIP=192.168.10.3
+CPORT=80
+FAIL_BACK=127.0.0.1
+RS=("192.168.10.7" "192.168.10.8")
+declare -a RSSTATUS
+RW=("2" "1")
+RPORT=80
+TYPE=g
+CHKLOOP=3
+LOG=/var/log/ipvsmonitor.log
+
+addrs() {
+  ipvsadm -a -t $VIP:$CPORT -r $1:$RPORT -$TYPE -w $2
+  [ $? -eq 0 ] && return 0 || return 1
+}
+
+delrs() {
+  ipvsadm -d -t $VIP:$CPORT -r $1:$RPORT 
+  [ $? -eq 0 ] && return 0 || return 1
+}
+
+checkrs() {
+  local I=1
+  while [ $I -le $CHKLOOP ]; do 
+    if curl --connect-timeout 1 http://$1 &> /dev/null; then
+      return 0
+    fi
+    let I++
+  done
+  return 1
+}
+
+initstatus() {
+  local I
+  local COUNT=0;
+  for I in ${RS[*]}; do
+    if ipvsadm -L -n | grep "$I:$RPORT" && > /dev/null ; then
+      RSSTATUS[$COUNT]=1
+    else 
+      RSSTATUS[$COUNT]=0
+    fi
+  let COUNT++
+  done
+}
+
+initstatus
+while :; do
+  let COUNT=0
+  for I in ${RS[*]}; do
+    if checkrs $I; then
+      if [ ${RSSTATUS[$COUNT]} -eq 0 ]; then
+         addrs $I ${RW[$COUNT]}
+         [ $? -eq 0 ] && RSSTATUS[$COUNT]=1 && echo "`date +'%F %H:%M:%S'`, $I is back." >> $LOG
+      fi
+    else
+      if [ ${RSSTATUS[$COUNT]} -eq 1 ]; then
+         delrs $I
+         [ $? -eq 0 ] && RSSTATUS[$COUNT]=0 && echo "`date +'%F %H:%M:%S'`, $I is gone." >> $LOG
+      fi
+    fi
+    let COUNT++
+  done 
+  sleep 5
+done
+
+
+
+
+知识回顾
+DR：
+	arp_ignore = 1
+	arp_announce = 2
+
+数组：变量阵列
+array_name=("" "" "")
+
+declare -a A
+
+
+
+LVS持久连接:
+	无论使用算法，LVS持久都能实现在一定时间内，将来自同一个客户端请求派发至此前选定的RS。
+
+	持久连接模板(内存缓冲区)：
+		每一个客户端  及分配给它的RS的映射关系；
+
+	ipvsadm -A|E ... -p timeout:
+		timeout: 持久连接时长，默认300秒；单位是秒；
+
+	在基于SSL，需要用到持久连接；
+	
+
+	PPC：将来自于同一个客户端对同一个集群服务的请求，始终定向至此前选定的RS；     持久端口连接
+	PCC：将来自于同一个客户端对所有端口的请求，始终定向至此前选定的RS；           持久客户端连接
+		把所有端口统统定义为集群服务，一律向RS转发；
+
+	PNMPP：持久防火墙标记连接
+
+	80： RS1
+	23： 同一个RS
+
+
+	防火墙标记：
+		PREROUTING	
+			80: 10
+			23: 10
+
+		10
+80, 443
+http: 
+https: 
+
+RS1: lamp, discuz
+	
+
+LVS基本原理、LVS类型、LVS调度算法、NAT模型的实现、DR模型的实现、VIP和RIP不在同一网段实现要点。
+
+
+LVS持久连接：
+	持久连接模板：
+		-p 600
+
+	PPC
+	PCC
+	PNFM
+
+	ipvs:
+		-t: TCP
+		-u: UDP
+		-f MARK
+			# iptables -t mangle -A PREROUTING -d $VIP -p tcp --dport $ClusterPORT -i $INCARD -j MARK --set-mark 10 
+
+		port affinity: 端口姻亲
+
+
+HA:
+
+资源粘性：
+
+资源约束：Constraint
+	排列约束: (colocation)
+		资源是否能够运行于同一节点
+			score:
+				正值：可以在一起
+				负值：不能在一起
+	位置约束：(location), score(分数)
+		正值：倾向于此节点
+		负值：倾向于逃离于此节点
+	顺序约束: (order)
+		定义资源启动或关闭时的次序
+			vip, ipvs
+				ipvs-->vip
+
+  -inf: 负无穷
+  inf: 正无穷
+
+
+资源隔离：
+	节点级别：STONITH
+	资源级别：
+		例如：FC SAN switch可以实现在存储资源级别拒绝某节点的访问
+
+
+STONITH：
+
+
+	split-brain: 集群节点无法有效获取其它节点的状态信息时，产生脑裂
+		后果之一：抢占共享存储
+
+
+active/active： 高可用
+
+
+
+
+IDE:(ATA)，130M
+SATA：600M
+	7200rpm
+	IOPS: 100
+SCSI: 320M
+SAS: 
+	15000rpm
+	IOPS: 200
+USB 3.0: 400M
+
+机械：
+	随机读写
+	顺序读写
+固态：
+	
+IDE, SCSI: 并口
+SATA, SAS, USB： 串口
+
+
+DAS:
+	Direct Attached Storage
+	直接接到主板总线，BUS
+		文件：块
+NAS：
+	Network
+	文件服务器：文件级别
+SAN:
+
+	Storage Area network
+	存储区域网络
+		FC SAN
+		IP SAN: iSCSI
+
+
+SCSI: Small Computer System Interface
+
+
+
+资源粘性：资源对某点的依赖程度，通过score定义
+
+资源约束：
+	location: 资源对节点倾向程度
+	coloation: 资源间依赖性
+	order: 资源的采取动作的次序
+
+
+
+Heartbeat v1 自带的资源管理器
+	haresources: 
+
+Heartbeat v2 自带的资源管理器
+	haresources
+	crm
+
+Heartbeat v3: 资源管理器crm发展为独立的项目，pacemaker
+
+
+
+Resource Type:
+	primitive: 
+	clone: 
+	group:
+	master/slave: drbd
+
+RA: Resource Agent
+	
+RA Classes:
+	Legacy heartbeat v1 RA
+	LSB (/etc/rc.d/init.d/)
+	OCF (Open Cluster Framework)
+		pacemaker
+		linbit (drbd)
+	STONITH
+
+
+隔离级别：
+	节点级别
+		STONTIH
+	资源级别
+		FC SAN Switch
+
+STONITH
+
+Stonith设备
+
+1、Power Distribution Units (PDU)
+
+Power Distribution Units are an essential element in managing power capacity and functionality for critical network, server and data center equipment. They can provide remote load monitoring of connected equipment and individual outlet power control for remote power recycling.
+
+2、Uninterruptible Power Supplies (UPS)
+
+A stable power supply provides emergency power to connected equipment by supplying power from a separate source in the event of utility power failure.
+
+3、Blade Power Control Devices
+
+If you are running a cluster on a set of blades, then the power control device in the blade enclosure is the only candidate for fencing. Of course, this device must be
+capable of managing single blade computers.
+
+4、Lights-out Devices
+
+Lights-out devices (IBM RSA, HP iLO, Dell DRAC) are becoming increasingly popular and may even become standard in off-the-shelf computers. However, they are inferior to UPS devices, because they share a power supply with their host (a cluster node). If a node stays without power, the device supposed to control it would be just as useless. In that case, the CRM would continue its attempts to fence the node indefinitely while all other resource operations would wait for the fencing/STONITH operation to complete.
+
+5、Testing Devices
+
+Testing devices are used exclusively for testing purposes. They are usually more gentle on the hardware. Once the cluster goes into production, they must be replaced
+with real fencing devices.
+
+ssh 172.16.100.1 'reboot'
+meatware
+
+
+
+
+STONITH的实现：
+
+stonithd
+
+stonithd is a daemon which can be accessed by local processes or over the network. It accepts the commands which correspond to fencing operations: reset, power-off, and power-on. It can also check the status of the fencing device.
+
+The stonithd daemon runs on every node in the CRM HA cluster. The stonithd instance running on the DC node receives a fencing request from the CRM. It is up to this and other stonithd programs to carry out the desired fencing operation.
+
+STONITH Plug-ins
+
+For every supported fencing device there is a STONITH plug-in which is capable of controlling said device. A STONITH plug-in is the interface to the fencing device.
+
+On each node, all STONITH plug-ins reside in /usr/lib/stonith/plugins (or in /usr/lib64/stonith/plugins for 64-bit architectures). All STONITH plug-ins look the same to stonithd, but are quite different on the other side reflecting the nature of the fencing device.
+
+Some plug-ins support more than one device. A typical example is ipmilan (or external/ipmi) which implements the IPMI protocol and can control any device which supports this protocol.
+
+
+
+epel
+
+heartbeat - Heartbeat subsystem for High-Availability Linux
+heartbeat-devel - Heartbeat development package
+heartbeat-gui - Provides a gui interface to manage heartbeat clusters
+heartbeat-ldirectord - Monitor daemon for maintaining high availability resources, 为ipvs高可用提供规则自动生成及后端realserver健康状态检查的组件；
+heartbeat-pils - Provides a general plugin and interface loading library
+heartbeat-stonith - Provides an interface to Shoot The Other Node In The Head
+
+
+http://dl.fedoraproject.org/pub/epel/5/i386/repoview/letter_h.group.html
+
+
+
+三个配置文件：
+1、密钥文件，600, authkeys
+2、heartbeat服务的配置配置ha.cf
+3、资源管理配置文件
+	haresources
+
+haresources
+主节点  RA1::parameter1::parameter2 RA2
+
+
+知识回顾：
+
+RA classes:
+	OCF
+		pacemaker
+		linbit
+	LSB
+	Legacy Heartbeat V1
+	STONITH
+
+RA: Resource Agent
+	代为管理资源
+
+LRM: Local Resource Manager
+
+DC
+	TE: 
+	PE: 
+
+CRM: Cluster Resource Manager
+	haresource (heartbeat v1)
+	crm, haresource (heartbeat v2)
+	pacemaker (heartbeat v3)
+	rgmanager (RHCS)
+
+	为那些非ha-aware的应用程序提供调用的基础平台；
+
+	crmd: 管理API
+		GUI
+		CLI
+
+
+Web:
+	vip, httpd, filesystem
+
+
+HA services:
+
+
+Resource Type:
+	primitive (native)
+	group
+	clone
+		STONITH
+		Cluster Filesystem
+			dlm: Distributed Lock Manager
+	master/slave
+		drbd
+
+资源粘性：
+	资源是否倾向于留在当前节点
+		正数：乐意
+		负数：离开
+
+		node1.magedu.com: 100, 200
+		node2.magedu.com: 100, inf
+
+		IPaddr::172.16.100.1/16/eth0
+
+
+
+
+资源约束：
+	location
+	colocation
+	order
+
+heartbeat:
+	authkeys
+	ha.cf
+		node
+		bcast、mcast、ucast
+	haresource
+
+HA:
+	1、时间同步；
+	2、SSH双机互信；
+	3、主机名称要与uname -n，并通过/etc/hosts解析；
+
+CIB: Cluster Information Base
+	xml格式
+
+	crm --> pacemaker
+
+
+
+
+
+原理简介
+
+　　组播报文的目的地址使用D类IP地址， 范围是从224.0.0.0到239.255.255.255。D类地址不能出现在IP报文的源IP地址字段。单播数据传输过程中，一个数据包传输的路径是从源地址路由到目的地址，利用“逐跳”（hop-by-hop）的原理在IP网络中传输。然而在ip组播环中，数据包的目的地址不是一个，而是一组，形成组地址。所有的信息接收者都加入到一个组内，并且一旦加入之后，流向组地址的数据立即开始向接收者传输，组中的所有成员都能接收到数据包。组播组中的成员是动态的，主机可以在任何时刻加入和离开组播组。
+
+
+组播组分类
+　　组播组可以是永久的也可以是临时的。组播组地址中，有一部分由官方分配的，称为永久组播组。永久组播组保持不变的是它的ip地址，组中的成员构成可以发生变化。永久组播组中成员的数量都可以是任意的，甚至可以为零。那些没有保留下来供永久组播组使用的ip组播地址，可以被临时组播组利用。
+　　224.0.0.0～224.0.0.255为预留的组播地址（永久组地址），地址224.0.0.0保留不做分配，其它地址供路由协议使用；
+　　224.0.1.0～224.0.1.255是公用组播地址，可以用于Internet；
+　　224.0.2.0～238.255.255.255为用户可用的组播地址（临时组地址），全网范围内有效；
+　　239.0.0.0～239.255.255.255为本地管理组播地址，仅在特定的本地范围内有效。
+
+
+常用预留组播地址
+　　列表如下：
+　　224.0.0.0 基准地址（保留）
+　　224.0.0.1 所有主机的地址 （包括所有路由器地址）
+　　224.0.0.2 所有组播路由器的地址
+　　224.0.0.3 不分配
+　　224.0.0.4 dvmrp 路由器
+　　224.0.0.5 ospf 路由器
+　　224.0.0.6 ospf dr
+　　224.0.0.7 st 路由器
+　　224.0.0.8 st 主机
+　　224.0.0.9 rip-2 路由器
+　　224.0.0.10 Eigrp 路由器
+　　224.0.0.11 活动代理
+　　224.0.0.12 dhcp 服务器/中继代理
+　　224.0.0.13 所有pim 路由器
+　　224.0.0.14 rsvp 封装
+　　224.0.0.15 所有cbt 路由器
+　　224.0.0.16 指定sbm
+　　224.0.0.17 所有sbms
+　　224.0.0.18 vrrp
+　　以太网传输单播ip报文的时候，目的mac地址使用的是接收者的mac地址。但是在传输组播报文时，传输目的不再是一个具体的接收者，而是一个成员不确定的组，所以使用的是组播mac地址。组播mac地址是和组播ip地址对应的。iana（internet assigned number authority）规定，组播mac地址的高24bit为0x01005e，mac 地址的低23bit为组播ip地址的低23bit。
+　　由于ip组播地址的后28位中只有23位被映射到mac地址，这样就会有32个ip组播地址映射到同一mac地址上。
+
+
+
+作业：
+某公司的站点，平均页面对象有60个，静态内容45个，动态内容15个，并发访问量峰值有4000个/秒，日常访问量为2500个/秒；经测试，公司的服务器对动态内容的响应能力为500个/秒，对静态内容的响应能力为10000个/秒；混合响应能力为700个/秒；假设对数据的访问需求使用一台MySQL即可完成响应。
+公司页面主要提供的服务为Discuz!X2.5所提供的论坛程序，允许用户上传附件。公司计划重新改造升级此系统，因此，需要重新设计此应用。请给出你的设计。
+
+
+
+基于hb v2，crm来实现MySQL高可用集群
+
+ nfs, samba, iscsi
+
+ NFS: MySQL app, data
+
+ 	/etc/my.cnf --> /etc/mysql/mysql.cnf
+ 	$MYSQL_BASE
+ 	--default-extra-file = 
+
+ 	node1: mysql, mysql
+
+nfs: 
+
+
+vip, mysqld, filesystem
+	
+	vip
+	filesystem
+	mysqld
+
+
+拖 延 症
+
+
+Heartbeat: 
+
+REHL 6.x RHCS: corosync
+RHEL 5.x RHCS: openais, cman, rgmanager
+
+
+	corosync: Messaging Layer
+
+	openais: AIS
+
+
+corosync --> pacemaker
+	SUSE Linux Enterprise Server: Hawk, WebGUI
+	LCMC: Linux Cluster Management Console
+
+	RHCS: Conga(luci/ricci)
+		webGUI
+
+	keepalived: VRRP, 2节点
+
+rpm, sources
+
+	pacemaker, corosync
+			   heartbeat 
+
+corosync:
+	1、时间同步
+	2、主机名
+	3、SSH
+
+
+
+
+crm: 两种模式
+	交互式：
+		配置，执行commit命令以后才生效
+	批处理：
+		立即生效
+
+
+
+分布式复制块设备：DRBD
+
+RAID 1： mirror
+
+
+DRBD: 主从
+	primary: 可执行读、写操作
+	secondary: 文件系统不能挂载
+
+	A: primay
+	B: secondary
+
+
+DRBD: dual primay, 双主
+
+磁盘调度器：合并读请求，合并写请求；
+
+
+Procotol: 
+	A: Async, 异步
+	B：semi sync, 半同步
+	C：sync, 同步
+
+
+
+DRBD Source: DRBD资源
+	资源名称：可以是除了空白字符外的任意ACSII码字符；
+	DRBD设备：在双方节点上，此DRBD设备的设备文件；一般为/dev/drbdN，其主设备号147
+	磁盘：在双方节点上，各自提供的存储设备；
+	网络配置：双方数据同步时所使用的网络属性；
+
+drbd: 2.6.33起，整合进内核
+
+
+
+for I in {1..2}; do ssh node$I 'wget ftp://172.16.0.1/pub/Sources/drbd/a.rpm'; done
+
+
+mydrbd
+
+/dev/drbd0
+
+/dev/sda5
+
+drbd的配置文件：
+	/etc/drbd.conf
+	/etc/drbd.d/global_common.conf
+	/etc/drbd.d/resource.d/
+
+
+drbd + corosync	
+
+mysqld + drbd + corosync 
+
+
+/lib64
+
+
+32:
+boot: linux ip= netmask= gateway= dns= ks=http://172.16.0.1/rhel6.i386.cfg
+
+64:
+boot: linux ip= netmask= gateway= dns= ks=http://172.16.0.1/rhel6.x64.cfg
+
+
+RHCS: 
+	CCS: Cluster Configuration System
+		ccsd
+	CMAN: /etc/cluster/cluster.conf
+
+RHCS: Failover Domain
+	服务：故障转移域：Service
+
+	HA Server: VIP, httpd, Filesystem
+
+
+HA：
+	node1 node1.magedu.com  172.16.100.6
+
+
+
+	steppingstone.magedu.com 172.16.100.100
+
+
+
+前提：
+1、时间同步；
+2、名称解析，且每个主机的主机名与其'uname -n'保持一致；
+3、配置好每个节点的Yum；
+
+
+
+RHCS: 
+	cman, rgmanager, system-config-cluster
+
+RHCS: 
+1、每个集群都有惟一集群名称；
+2、至少有一个fence设备；
+3、至少应该有三个节点；两个节点的场景中要使用qdisk；
+
+两个资源：
+	VIP
+	httpd
+
+	-M：实时迁移虚拟机
+
+
+
+iSCSI Target: scsi-target-utils
+	3260
+	客户端认正方式：
+	1、基于IP
+	2、基于用户，CHAP
+
+
+iSCSI Initiator: iscsi-initiator-utils
+	open-iscsi
+
+
+tgtadm模式化的命令
+	--mode
+	常用模式：target、logicalunit、account
+		target --op
+			new、delete、show、update、bind、unbind
+		logicalunit --op
+			new、delete
+		account --op
+			new、delete、bind、unbind
+
+	--lld, -L
+	--tid, -t
+	--lun, -l
+	--backing-store <path>, -b
+	--initiator-address <address>, -I
+	-T, --targetname <targetname>
+
+targetname: 
+	iqn.yyyy-mm.<reversed domain name>[:identifier]
+	iqn.2013-05.com.magedu:tstore.disk1
+
+iscsiadm模式化的命令
+	-m {discovery|node|session|iface}
+		discovery: 发现某服务器是否有target输出，以及输出了哪些target；
+		node: 管理跟某target的关联关系；
+		session: 会话管理
+		iface: 接口管理
+
+	iscsiadm -m discovery [ -d debug_level ] [ -P printlevel ] [ -I iface -t type -p ip:port [ -l ] ] 
+		-d: 0-8
+		-I: 
+		-t type: SendTargets(st), SLP, and iSNS
+		-p: IP:port
+	iscsiadm -m discovery -d 2 -t st -p 172.16.100.100
+
+
+	iscsiadm -m node  [ -d debug_level ]  [ -L all,manual,automatic ] | [ -U all,manual,automatic ] 
+
+	iscsiadm -m node  [ -d debug_level ]  [ [ -T targetname -p ip:port -I ifaceN ] [ -l | -u ] ] [ [ -o  operation  ] [ -n name ] [ -v value ] ]
+
+
+iscsi-initiator-utils: 
+	不支持discovery认证；
+	如果使用基于用户的认证，必须首先开放基于IP的认证；
+
+
+
+cman, rgmanger, gfs2-utils
+
+mkfs.gfs2 
+  -j #: 指定日志区域的个数，有几个就能够被几个节点所挂载；
+  -J #: 指定日志区域的大小，默认为128MB; 
+  -p {lock_dlm|lock_nolock}: 
+  -t <name>: 锁表的名称，格式为clustername:locktablename, clustername为当前节点所在的集群的名称，locktablename要在当前集群惟一；
+  
+
+
+
+cLVM: 共享存储做成LVM，
+	借用HA的机制
+
+	/etc/lvm/lvm.conf
+	locking_type = 3
+	clvm, 
+
+
+
+gfs2_tool
+gfs2_jadd -j
+gfs2_grow
+
+mkfs.gfs2 
+
+fsck.gfs2
+
+
+VRRP: Virtual Routing Redundent Protocol
+
+VRRPv2 VRRPv3
+
+备份组中：有一个主，master，多个从, slave
+
+master: 
+	选举协议：
+
+一主多从：
+
+
+
+备份组：
+	master, slave
+
+在一个物理设备上，可以配置多个组，靠组ID区别不同的组
+
+在同一个组内：
+
+
+--enable-vrrp
+--disable-snmp
+
+
+vrrp_instance: 定义虚拟路由
+	
+
+	MASTER|BACKUP
+
+ipvsadm -A -t IP:port -s 
+
+
+
+keepalived:  
+	ipvs --> HA
+	ipvs: --> VIP
+		vrrp: 
+
+
+
+
+1、所有realserver都down，如何处理？
+2、自写监测脚本，完成维护模式切换？
+3、如何在vrrp事务发生时，发送警告邮件给指定的管理员？
+
+vrrp_script chk_haproxy {
+    script "killall -0 haproxy"
+    interval 2
+        # check every 2 seconds
+    weight -2
+        # if failed, decrease 2 of the priority
+    fall 2
+        # require 2 failures for failures
+    rise 1
+        # require 1 sucesses for ok
+}
+
+
+vrrp_script chk_name {
+		script ""
+		inerval #
+		weight #
+		fall 2
+		rise 1
+}
+
+
+    track_script {
+        chk_schedown
+    }
+
+
+
+标题：vip added to HA1
+正文：日期 时间，HA1 's STATE from 	MASTER to BACKUP.
+
+
+
+
+大规模，高并发web服务器体系结构：
+
+MySQL复制，Nginx, LNMP, Memcached, Tomcat(java, servlet, 集群)，varnish(squid)
+
+NoSQL(redis, mongodb)
+
+
+
+NetworkManager
+
+network
+
+
+/etc/udev/rules.d/70-persistent-net.rule
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Paxos算法
+
+
+在网络拥塞控制领域，我们知道有一个非常有名的算法叫做Nagle算法（Nagle algorithm），这是使用它的发明人John Nagle的名字来命名的，John Nagle在1984年首次用这个算法来尝试解决福特汽车公司的网络拥塞问题（RFC 896），该问题的具体描述是：如果我们的应用程序一次产生1个字节的数据，而这个1个字节数据又以网络数据包的形式发送到远端服务器，那么就很容易导致网络由于太多的数据包而过载。比如，当用户使用Telnet连接到远程服务器时，每一次击键操作就会产生1个字节数据，进而发送出去一个数据包，所以，在典型情况下，传送一个只拥有1个字节有效数据的数据包，却要发费40个字节长包头（即ip头20字节+tcp头20字节）的额外开销，这种有效载荷（payload）利用率极其低下的情况被统称之为愚蠢窗口症候群（Silly Window Syndrome）。可以看到，这种情况对于轻负载的网络来说，可能还可以接受，但是对于重负载的网络而言，就极有可能承载不了而轻易的发生拥塞瘫痪。
+针对上面提到的这个状况，Nagle算法的改进在于：如果发送端欲多次发送包含少量字符的数据包（一般情况下，后面统一称长度小于MSS的数据包为小包，与此相对，称长度等于MSS的数据包为大包，为了某些对比说明，还有中包，即长度比小包长，但又不足一个MSS的包），则发送端会先将第一个小包发送出去，而将后面到达的少量字符数据都缓存起来而不立即发送，直到收到接收端对前一个数据包报文段的ACK确认、或当前字符属于紧急数据，或者积攒到了一定数量的数据（比如缓存的字符数据已经达到数据包报文段的最大长度）等多种情况才将其组成一个较大的数据包发送出去。
+
+TCP中的Nagle算法默认是启用的，但是它并不是适合任何情况，对于telnet或rlogin这样的远程登录应用的确比较适合（原本就是为此而设计），但是在某些应用场景下我们却又需要关闭它。 
+
+Negale算法是指发送方发送的数据不会立即发出, 而是先放在缓冲区, 等缓存区满了再发出. 发送完一批数据后, 会等待接收方对这批数据的回应, 然后再发送下一批数据。Negale 算法适用于发送方需要发送大批量数据, 并且接收方会及时作出回应的场合, 这种算法通过减少传输数据的次数来提高通信效率。如果发送方持续地发送小批量的数据, 并且接收方不一定会立即发送响应数据, 那么Negale算法会使发送方运行很慢. 对于GUI 程序, 如网络游戏程序(服务器需要实时跟踪客户端鼠标的移动), 这个问题尤其突出. 客户端鼠标位置改动的信息需要实时发送到服务器上, 由于Negale 算法采用缓冲, 大大减低了实时响应速度, 导致客户程序运行很慢。这个时候就需要使用TCP_NODELAY选项。
+
+
+
+

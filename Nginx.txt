@@ -1,0 +1,2112 @@
+
+nginx
+
+Nginx is a free, open-source, high-performance HTTP server and reverse proxy, as well as an IMAP/POP3 proxy server. Igor Sysoev started development of Nginx in 2002, with the first public release in 2004. Nginx now hosts nearly 7.67% (35.5M) of all domains worldwide.
+
+Nginx is known for its high performance, stability, rich feature set, simple configuration, and low resource consumption.
+
+Nginx is one of a handful of servers written to address the C10K problem. Unlike traditional servers, Nginx doesn't rely on threads to handle requests. Instead it uses a much more scalable event-driven (asynchronous) architecture. This architecture uses small, but more importantly, predictable amounts of memory under load.
+Even if you don't expect to handle thousands of simultaneous requests, you can still benefit from Nginx's high-performance and small memory footprint. Nginx scales in all directions: from the smallest VPS all the way up to clusters of servers.
+
+Nginx powers several high-visibility sites, such as WordPress, Hulu, Github, Ohloh, SourceForge, WhitePages and TorrentReactor.
+
+
+功能：
+web服务器
+web reverse proxy
+smtp reverse proxy
+
+LNMP fastcgi,    lighttpd  (GNU, GUI, Gnome)
+
+
+LNMP (cache, apc)
+Corosync + ningx
+
+
+Installing the nginx
+
+yum install gcc openssl-devel pcre-devel zlib-devel 
+
+# groupadd -r nginx
+# useradd -r -g nginx -s /bin/false -M nginx
+
+./configure \
+  --prefix=/usr \
+  --sbin-path=/usr/sbin/nginx \
+  --conf-path=/etc/nginx/nginx.conf \
+  --error-log-path=/var/log/nginx/error.log \
+  --http-log-path=/var/log/nginx/access.log \
+  --pid-path=/var/run/nginx/nginx.pid  \
+  --lock-path=/var/lock/nginx.lock \
+  --user=nginx \
+  --group=nginx \
+  --with-http_ssl_module \
+  --with-http_flv_module \
+  --with-http_stub_status_module \
+  --with-http_gzip_static_module \
+  --http-client-body-temp-path=/var/tmp/nginx/client/ \
+  --http-proxy-temp-path=/var/tmp/nginx/proxy/ \
+  --http-fastcgi-temp-path=/var/tmp/nginx/fcgi/ \
+  --http-uwsgi-temp-path=/var/tmp/nginx/uwsgi \
+  --http-scgi-temp-path=/var/tmp/nginx/scgi \
+  --with-pcre
+  
+/usr/html
+
+
+make && make install
+
+关于配置选项的简单说明： 
+
+--prefix=<path> - The path relative to which all other Nginx paths will resolve. If not specified, defaults to /usr/local/nginx.
+
+--sbin-path=<path> - The path to the nginx executable. Only used for installation. If not specified defaults to <prefix>/sbin/nginx.
+
+--conf-path=<path> - The default location of nginx.conf if no -c parameter is provided. If not provided, defaults to <prefix>/conf/nginx.conf. 
+
+--pid-path=<path> - The path to nginx.pid, if not set via the "pid" directive in nginx.conf. If not provided, defaults to <prefix>/logs/nginx.pid. 
+
+--error-log-path=<path> - The location of the error log if not set via the "error_log" in nginx.conf. If not set, defaults to <prefix>/logs/error.log.
+
+--http-log-path=<path> - The location of the access log if not set via the "access_log" directive in nginx.conf. If not set, defaults to <prefix>/logs/access.log.
+
+--user=<user> - The default user that nginx will run as if not set in nginx.conf via the "user" directive. If not set, defaults to "nobody".
+
+--group=<group> - The default group that nginx will run under if not set via the "user" directive in nginx.conf. If not set defaults to "nobody". 
+
+--with-http_ssl_module - Enable ngx_http_ssl_module. Enables SSL support and the ability to handle HTTPS requests. Requires OpenSSL. On Debian, this is libssl-dev.
+
+--with-http_flv_module - Enable ngx_http_flv_module 
+
+--http-client-body-temp-path=PATH - Set path to the http client request body temporary files. If not set, defaults to <prefix>/client_body_temp 
+
+--http-proxy-temp-path=PATH - Set path to the http proxy temporary files. If not set, defaults to <prefix>/proxy_temp
+
+--http-fastcgi-temp-path=PATH - Set path to the http fastcgi temporary files. If not set, defaults to <prefix>/fastcgi_temp 
+
+
+--lock-path=<path> - The path to the nginx.lock file. If not provided, defaults to <prefix>/logs/nginx.lock. 
+
+
+Red Hat Nginx Init Script Should work on RHEL, Fedora, CentOS. Tested on CentOS 5. 
+
+Save this file as /etc/init.d/nginx 
+
+http {
+  server {
+    location {
+    }
+    location
+    {
+    }
+  }  
+  server {
+  }
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+#!/bin/sh
+#
+# nginx - this script starts and stops the nginx daemon
+#
+# chkconfig:   - 85 15 
+# description:  Nginx is an HTTP(S) server, HTTP(S) reverse \
+#               proxy and IMAP/POP3 proxy server
+# processname: nginx
+# config:      /etc/nginx/nginx.conf
+# config:      /etc/sysconfig/nginx
+# pidfile:     /var/run/nginx.pid
+ 
+# Source function library.
+. /etc/rc.d/init.d/functions
+ 
+# Source networking configuration.
+. /etc/sysconfig/network
+ 
+# Check that networking is up.
+[ "$NETWORKING" = "no" ] && exit 0
+ 
+nginx="/usr/sbin/nginx"
+prog=$(basename $nginx)
+ 
+NGINX_CONF_FILE="/etc/nginx/nginx.conf"
+ 
+[ -f /etc/sysconfig/nginx ] && . /etc/sysconfig/nginx
+ 
+lockfile=/var/lock/subsys/nginx
+ 
+make_dirs() {
+   # make required directories
+   user=`nginx -V 2>&1 | grep "configure arguments:" | sed 's/[^*]*--user=\([^ ]*\).*/\1/g' -`
+   options=`$nginx -V 2>&1 | grep 'configure arguments:'`
+   for opt in $options; do
+       if [ `echo $opt | grep '.*-temp-path'` ]; then
+           value=`echo $opt | cut -d "=" -f 2`
+           if [ ! -d "$value" ]; then
+               # echo "creating" $value
+               mkdir -p $value && chown -R $user $value
+           fi
+       fi
+   done
+}
+ 
+start() {
+    [ -x $nginx ] || exit 5
+    [ -f $NGINX_CONF_FILE ] || exit 6
+    make_dirs
+    echo -n $"Starting $prog: "
+    daemon $nginx -c $NGINX_CONF_FILE
+    retval=$?
+    echo
+    [ $retval -eq 0 ] && touch $lockfile
+    return $retval
+}
+ 
+stop() {
+    echo -n $"Stopping $prog: "
+    killproc $prog -QUIT
+    retval=$?
+    echo
+    [ $retval -eq 0 ] && rm -f $lockfile
+    return $retval
+}
+ 
+restart() {
+    configtest || return $?
+    stop
+    sleep 1
+    start
+}
+ 
+reload() {
+    configtest || return $?
+    echo -n $"Reloading $prog: "
+    killproc $nginx -HUP
+    RETVAL=$?
+    echo
+}
+ 
+force_reload() {
+    restart
+}
+ 
+configtest() {
+  $nginx -t -c $NGINX_CONF_FILE
+}
+ 
+rh_status() {
+    status $prog
+}
+ 
+rh_status_q() {
+    rh_status >/dev/null 2>&1
+}
+ 
+case "$1" in
+    start)
+        rh_status_q && exit 0
+        $1
+        ;;
+    stop)
+        rh_status_q || exit 0
+        $1
+        ;;
+    restart|configtest)
+        $1
+        ;;
+    reload)
+        rh_status_q || exit 7
+        $1
+        ;;
+    force-reload)
+        force_reload
+        ;;
+    status)
+        rh_status
+        ;;
+    condrestart|try-restart)
+        rh_status_q || exit 0
+            ;;
+    *)
+        echo $"Usage: $0 {start|stop|status|restart|condrestart|try-restart|reload|force-reload|configtest}"
+        exit 2
+esac
+
+
+
+
+ab
+
+webbench
+http_load
+
+Loadrunner
+
+Jmeter
+
+
+
+
+
+
+
+
+Configuration directive:
+
+listen
+
+syntax: listen address:port [ default [ backlog=num | rcvbuf=size | sndbuf=size | accept_filter=filter | deferred | bind | ssl ] ] 
+
+default: listen 80
+
+context: server
+
+The listen directive specifies the address and port accepted by the enclosing server {...} block. It is possible to specify only an address, only a port, or a server name as the address.
+
+listen 127.0.0.1:8000;
+listen 127.0.0.1;
+listen 8000;
+listen *:8000;
+listen localhost:8000;
+
+
+location / {
+
+}
+
+location = / {
+
+
+}
+
+/a/bc/d.html
+
+/bbs/a.html
+/bbs/a/b.html
+
+
+http://www.a.org/bbs/abc
+
+
+location 
+
+syntax: location [=|~|~*|^~|@] /uri/ { ... }
+
+default: no
+
+context: server
+
+This directive allows different configurations depending on the URI. It can be configured using both literal strings and regular expressions. To use regular expressions, you must use a prefix:
+
+   1. "~" for case sensitive matching
+   2. "~*" for case insensitive matching 
+
+To determine which location directive matches a particular query, the literal strings are checked first. Literal strings match the beginning portion of the query - the most specific match will be used. Afterwards, regular expressions are checked in the order defined in the configuration file. The first regular expression to match the query will stop the search. If no regular expression matches are found, the result from the literal string search is used. 
+
+It is possible to disable regular expression checks after literal string matching by using "^~" prefix. If most specific match literal location have this prefix - regular expressions aren't checked. 
+
+
+By using "=" prefix on may define exact match between URI and location. On match search stops immediately as further search has no sense. E.g. if the request "/" occurs frequently, using "location = /" will speed up processing of this request a bit as search will stop after first comparison.
+
+
+
+On exact match with literal location without "=" or "^~" prefixes search is also immediately terminated.
+
+To summarize, the order in which directives are checked is as follows:
+
+   1. Directives with the "=" prefix that match the query exactly. If found, searching stops.
+   2. All remaining directives with conventional strings. If this match used the "^~" prefix, searching stops.
+   3. Regular expressions, in the order they are defined in the configuration file.
+   4. If #3 yielded a match, that result is used. Otherwise, the match from #2 is used. 
+
+It is important to know that nginx does the comparison against decoded URIs. For example, if you wish to match "/images/%20/test", then you must use "/images/ /test" to determine the location.
+
+Example:
+
+location  = / {
+  # matches the query / only.
+  [ configuration A ] 
+}
+location  / {
+  # matches any query, since all queries begin with /, but regular
+  # expressions and any longer conventional blocks will be
+  # matched first.
+  [ configuration B ] 
+}
+location ^~ /images/ {
+  # matches any query beginning with /images/ and halts searching,
+  # so regular expressions will not be checked.
+  [ configuration C ] 
+}
+location ~* \.(gif|jpg|jpeg)$ {
+  # matches any request ending in gif, jpg, or jpeg. However, all
+  # requests to the /images/ directory will be handled by
+  # Configuration C.   
+  [ configuration D ] 
+}
+
+Example requests:
+    * / -> configuration A
+  * /a.html
+    * /documents/document.html -> configuration B
+    * /images/1.gif -> configuration C
+    * /documents/1.jpg -> configuration D 
+
+Note that you could define these 4 configurations in any order and the results would remain the same. While nested locations are allowed by the configuration file parser, their use is discouraged and may produce unexpected results.
+
+The prefix "@" specifies a named location. Such locations are not used during normal processing of requests, they are intended only to process internally redirected requests
+
+
+
+root
+
+syntax: root path
+
+default: root html
+
+context: http, server, location, if in location root specifies the document root for the requests. For example, with this configuration
+
+location  /i/ {
+  root  /spool/w3;
+}
+
+/i/c/d.html
+
+/spool/w3/i/c/d.html
+
+
+
+A request for "/i/top.gif" will return the file "/spool/w3/i/top.gif". You can use variables in the argument.
+
+note: Keep in mind that the root will still append the directory to the request so that a request for "/i/top.gif" will not look in "/spool/w3/top.gif" like might happen in an Apache-like alias configuration where the location match itself is dropped. Use the alias directive to achieve the Apache-like functionality. 
+
+
+
+
+server
+
+syntax: server {...}
+
+default: no
+
+context: http
+
+Directive assigns configuration for the virtual server.
+
+There is no separation of IP and name-based (the Host header of the request) servers.
+
+Instead, the directive listen is used to describe all addresses and ports on which incoming connections can occur, and in directive server_name indicate all names of the server. 
+
+
+alias
+
+DocumentRoot /web/htdocs
+
+URI: /a/b.html
+URI: /bbs
+
+
+syntax: alias file-path|directory-path;
+
+default: no
+
+context: location
+
+This directive assigns a path to be used for the indicated location. Note that it may look similar to the root directive, but the document root doesn't change, just the file system path used for the request.
+
+For example:
+
+location / {
+  root /spool/w3;
+}
+
+
+location  /bbs/ {
+  alias  /spool/bbs/;
+}
+
+URI: /i/a.html  --> /spool/w3/images/a.html
+
+location = /bbs/a.html {
+    root /web/vhosts;
+  alias /web/vhosts/bbs/a.html;
+}
+/web/vhosts/bbs/
+
+
+The request "/i/top.gif" will return the file "/spool/w3/images/top.gif".
+
+Alias can also be used in a regex specified location.
+
+For example:
+
+location ~ ^/download/(.*)$ {
+  alias /home/website/files/$1;
+}
+
+The request "/download/book.pdf" will return the file "/home/website/files/book.pdf"
+
+It is possible to use variables in the replacement path. 
+
+
+index
+
+syntax: index file-path [file-path [ ... ] ];
+
+default: no
+
+context: server, location 
+
+Sets the default file to serve if no file is specified in the URL. Multiple files can be specified. If the first file isn't found, the second will be used and so on. 
+
+
+Options Indexes FollowSynlinks
+
+
+
+
+autoindex module:
+
+This module provides automatic directory listings.
+
+The request only reaches the ngx_http_autoindex_module when the ngx_http_index_module did not find an index file.
+
+Example configuration
+
+location  /  {
+  autoindex  on;
+}
+
+autoindex
+
+syntax: autoindex [ on|off ]
+
+default: autoindex off
+
+context: http, server, location
+
+Enables or disables the automatic directory listing.
+
+
+autoindex_exact_size
+
+syntax: autoindex_exact_size [ on|off ]
+
+default: autoindex_exact_size on
+
+context: http, server, location
+
+Defines how to represent file sizes in the directory listing -- either accurately (in bytes), or rounded (KB, MB or GB).
+
+
+autoindex_localtime
+
+syntax: autoindex_localtime [ on|off ]
+
+default: autoindex_localtime off
+
+context: http, server, location
+
+Enables showing file times as local time. Default is "off" (GMT time). 
+
+
+
+
+AccessModule
+This module provides a simple host-based access control.
+
+Module nginx_http_access_module makes it possible to control access for specific IP-addresses of clients.
+
+Access rules are checked according to the order of their declaration. The first rule that matches a particular address or set of addresses is the one that is obeyed.
+
+Example configuration:
+
+location / {
+  deny    192.168.1.1;
+  allow   192.168.1.0/24;
+  allow   10.1.0.0/16;
+  deny    all;
+}
+
+In this example access is granted to networks 10.1.1.0/16 and 192.168.1.0/24 with the exception of address 192.168.1.1, which is denied access together with all other addresses as defined by the deny all rule that is matched last in this location block.
+
+Note that the order of the deny/allow is of the utmost importance.
+
+
+allow
+
+syntax: allow [ address | CIDR | all ]
+
+default: no
+
+context: http, server, location, limit_except
+
+Directive grants access for the network or addresses indicated.
+
+
+deny
+
+syntax: deny [ address | CIDR | all ]
+
+default: no
+
+context: http, server, location, limit_except
+
+Directive forbids access for the network or addresses indicated. 
+
+
+
+
+
+
+Virtual Hosts Examples 
+
+http {
+  server {
+    listen          80;
+    server_name     www.a.com;
+    access_log      logs/a.access.log main;
+ 
+    index index.html;
+    root  /var/www/a.com/htdocs;
+  }
+ 
+  server {
+    listen          8080;
+    server_name     www.b.com;
+    access_log      logs/b.access.log main;
+ 
+    index index.html;
+    root  /var/www/b.com/htdocs;
+  }
+}
+
+
+
+www.magedu.com   /www/magedu
+dz.magedu.com    /www/discuz
+
+
+
+
+
+A Default Catchall Virtual Host 
+
+http {
+  server {
+    listen          80 default;
+    server_name     _;
+    access_log      logs/default.access.log main;
+ 
+    server_name_in_redirect  off;
+ 
+    index index.html;
+    root  /var/www/default/htdocs;
+  }
+}
+
+
+
+
+/web/html
+
+
+
+
+
+
+
+
+开启Nginx状态监控的功能：
+
+location /nginx_status {
+  stub_status on;
+  access_log off;
+}
+
+
+
+
+
+stub_status
+syntax: stub_status on
+
+default: None
+
+context: location
+
+Enables the status handler in this location.
+
+The stub status module reports status similar to mathopd's status page. It is plain text information like
+
+Active connections: 291
+server accepts handled requests
+  16630948 16630948 31070465
+Reading: 6 Writing: 179 Waiting: 106
+
+active connections -- number of all open connections including connections to backends
+
+server accepts handled requests -- nginx accepted 16630948 connections, handled 16630948 connections (no one was closed just it was accepted), and handles 31070465 requests (1.8 requests per connection)
+
+reading -- nginx reads request header
+
+writing -- nginx reads request body, processes request, or writes response to a client
+
+waiting -- keep-alive connections, actually it is active - (reading + writing)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+启用基于用户的认证：
+server {
+  server_name www.magedu.com;
+  . . .
+  location / {
+    auth_basic "Restricted";
+    auth_basic_user_file /etc/nginx/.htpasswd;
+    . . .
+  }
+  
+  location ~ /\.ht {
+        deny  all;
+  }
+  
+}
+
+
+
+
+
+
+
+What is FastCGI
+
+FastCGI is a high-speed and scalable interface for communicating with the web server scripting language. FastCGI is supported by many scripting languages, including php, if it is compiled with the option - --enable-fastcgi. 
+
+It is supported by most popular web servers, including Apache (mod_fastcgi and mod_fcgid), Zeus, nginx and lighttpd. The main advantage of FastCGI is isolating the dynamic language from the web server. The technology, among other things, allows you to run a web server and dynamic language for the different hosts, which improves scalability and also aids security without a significant loss of productivity. 
+
+PHP-FPM works on with any web server that supports FastCGI.
+
+
+Howto
+
+Make sure libxml2 (and libxml2-devel) is installed, and libevent version is 1.4.12 or later.
+
+for PHP 5.2.x: 
+
+$ bzip2 -cd php-5.2.13.tar.bz2 | tar xf -
+$ patch -d php-5.2.13 -p1 <php-fpm-0.6~5.2.patch
+$ cd php-5.2.13
+$ ./buildconf --force
+$ ./configure --enable-fastcgi --with-fpm --with-libevent[=path] ...
+
+autorun php-fpm: 
+
+$ ln -s /usr/local/sbin/php-fpm /etc/init.d/php-fpm
+$ /usr/sbin/update-rc.d -f php-fpm defaults
+
+
+for PHP 5.3.x: 
+
+$ cd php-5.3.x
+$ svn co http://svn.php.net/repository/php/php-src/trunk/sapi/fpm sapi/fpm
+$ ./buildconf --force
+$ ./configure --enable-fpm ...your other configure options, etc...
+$ make && make install
+Edit /etc/php-fpm.conf 
+
+Run php-fpm start (probably in your $PATH). Check logfile /var/log/php-fpm.log for details if needed.  
+ 
+
+
+
+PHP-FPM (FastCGI Process Manager) is an alternative PHP FastCGI implementation with some additional features useful for sites of any size, especially busier sites.
+
+
+for PHP 5.3.3
+
+PHP-FPM is now included in PHP core as of PHP 5.3.3.   Make sure libxml2 (and libxml2-devel) is installed, and libevent version is 1.4.12 or later, and libiconv.
+
+libevent
+
+The libevent API provides a mechanism to execute a callback function when a specific event occurs on a file descriptor or after a timeout has been reached. Furthermore, libevent also support callbacks due to signals or regular timeouts.
+
+libevent is meant to replace the event loop found in event driven network servers. An application just needs to call event_dispatch() and then add or remove events dynamically without having to change the event loop.
+
+Currently, libevent supports /dev/poll, kqueue(2), event ports, select(2), poll(2) and epoll(4). The internal event mechanism is completely independent of the exposed event API, and a simple update of libevent can provide new functionality without having to redesign the applications. As a result, Libevent allows for portable application development and provides the most scalable event notification mechanism available on an operating system. Libevent can also be used for multi-threaded applications. 
+
+# tar zxvf libevent-1.4.14b-stable.tar.gz
+# cd libevent-1.4.14b-stable
+# ./configure
+# make && make install
+# make verify
+
+
+libiconv
+
+For historical reasons, international text is often encoded using a language or country dependent character encoding. With the advent of the internet and the frequent exchange of text across countries - even the viewing of a web page from a foreign country is a "text exchange" in this context -, conversions between these encodings have become important. They have also become a problem, because many characters which are present in one encoding are absent in many other encodings. To solve this mess, the Unicode encoding has been created. It is a super-encoding of all others and is therefore the default encoding for new text formats like XML.
+
+Still, many computers still operate in locale with a traditional (limited) character encoding. Some programs, like mailers and web browsers, must be able to convert between a given text encoding and the user's encoding. Other programs internally store strings in Unicode, to facilitate internal processing, and need to convert between internal string representation (Unicode) and external string representation (a traditional encoding) when they are doing I/O. GNU libiconv is a conversion library for both kinds of applications. 
+
+# tar zxvf libiconv-1.13.1.tar.gz
+# cd libiconv-1.13.1
+# ./configure
+# make && make install
+
+
+
+
+libmcrypt
+
+MCrypt is a replacement for the old crypt() package and crypt(1) command, with extensions. It allows developers to use a wide range of encryption functions, without making drastic changes to their code. It allows users to encrypt files or data streams without having to be cryptographers. Above all, it allows you to have some really neat code on your machine. :)
+
+The companion to MCrypt is Libmcrypt, which contains the actual encryption functions themselves, and provides a standardized mechanism for accessing them. 
+# tar zxvf libmcrypt-2.5.8.tar.gz
+# cd libmcrypt-2.5.8
+# ./configure
+# make && make install
+# ldconfig -v
+# cd libltdl
+# ./configure --with-gmetad --enable-gexec --enable-ltdl-install
+# make && make install
+
+
+
+
+mhash
+
+Mhash is a free (under GNU Lesser GPL) library which provides a uniform interface to a large number of hash algorithms. These algorithms can be used to compute checksums, message digests, and other signatures. 
+
+# tar jxvf mhash-0.9.9.9.tar.bz2
+# cd mhash-0.9.9.9 
+# ./configure
+# make && make install
+
+# ln -sv /usr/local/lib/libmcrypt* /usr/lib/
+# ln -sv /usr/local/lib/libmhash.* /usr/lib/
+
+
+php-5.3.6
+
+# tar jxvf php-5.3.6.tar.bz2
+# cd jxvf php-5.3.6
+# ./configure --prefix=/usr/local/php --with-mysql=/usr/local/mysql --with-openssl --enable-fpm --with-mysqli=/usr/local/mysql/bin/mysql_config --enable-mbstring --with-freetype-dir --with-jpeg-dir --with-png-dir --with-zlib-dir --with-libxml-dir=/usr --enable-xml  --with-mhash --with-mcrypt  --with-config-file-path=/etc/php --with-config-file-scan-dir=/etc/php --with-bz2 --with-curl 
+
+
+--with-iconv=/usr/local
+
+# make ZEND_EXTRA_LIBS='-liconv'
+# make install
+# cp php.ini-production /usr/local/php/etc/php.ini
+# cp sapi/fpm/init.d.php-fpm  /etc/rc.d/init.d/php-fpm
+# 
+
+启动fastcgi：
+# cp /usr/local/php/etc/php-fpm.conf.default /usr/local/php/etc/php-fpm.conf 
+# vim /usr/local/php/etc/php-fpm.conf
+启用如下选项：
+pm.max_children = 50
+pm.start_servers = 5
+pm.min_spare_servers = 2
+pm.max_spare_servers = 8
+pid = /var/run/php-fpm.pid
+
+
+# 
+
+
+
+编译php跟apache起工作：
+./configure --prefix=/usr/local/php4httpd --with-mysql=/usr/local/mysql --with-openssl --with-apxs2=/usr/local/apache/bin/apxs --with-mysqli=/usr/local/mysql/bin/mysql_config --enable-mbstring --with-freetype-dir --with-jpeg-dir --with-png-dir --with-zlib-dir --with-libxml-dir=/usr --enable-xml  --with-mhash --with-mcrypt --with-bz2 --with-curl
+
+
+
+
+
+
+
+
+
+
+
+接下来整合nginx和php5
+
+编辑/etc/nginx/nginx.conf，启用如下选项：
+location ~ \.php$ {
+            root           html;
+            fastcgi_pass   127.0.0.1:9000;
+            fastcgi_index  index.php;
+            fastcgi_param  SCRIPT_FILENAME  /scripts$fastcgi_script_name;
+            include        fastcgi_params;
+        }
+        
+        
+FastCGI Example
+
+First thing, I recommend keeping all your typical FCGI settings in a single file and importing them.
+
+For example you might have an /etc/nginx/fastcgi.conf (or /etc/nginx/fastcgi_params: installed by default on debian) file that looks like this:
+
+#vim fastcgi_params
+fastcgi_param  GATEWAY_INTERFACE  CGI/1.1;
+fastcgi_param  SERVER_SOFTWARE    nginx;
+fastcgi_param  QUERY_STRING       $query_string;
+fastcgi_param  REQUEST_METHOD     $request_method;
+fastcgi_param  CONTENT_TYPE       $content_type;
+fastcgi_param  CONTENT_LENGTH     $content_length;
+fastcgi_param  SCRIPT_FILENAME    $document_root$fastcgi_script_name;
+fastcgi_param  SCRIPT_NAME        $fastcgi_script_name;
+fastcgi_param  REQUEST_URI        $request_uri;
+fastcgi_param  DOCUMENT_URI       $document_uri;
+fastcgi_param  DOCUMENT_ROOT      $document_root;
+fastcgi_param  SERVER_PROTOCOL    $server_protocol;
+fastcgi_param  REMOTE_ADDR        $remote_addr;
+fastcgi_param  REMOTE_PORT        $remote_port;
+fastcgi_param  SERVER_ADDR        $server_addr;
+fastcgi_param  SERVER_PORT        $server_port;
+fastcgi_param  SERVER_NAME        $server_name;
+
+
+并在所支持的主页面格式中添加php格式的主页，类似如下：
+location / {
+            root   html;
+            index  index.php index.html index.htm;
+        }
+        
+而后重启nginx。
+# service nginx restart
+
+
+
+
+
+为FCGI设定缓存：
+http {
+  fastcgi_cache_path /www/cache levels=1:2
+    keys_zone=fcgicache:10m
+    inactive=5m;
+  server {
+    server_name wwww.magedu.com;
+    ...
+    location / {
+      ...
+      fastcgi_pass 127.0.0.1:9000;
+      fastcgi_cache fcgicache;
+      fastcgi_cache_valid 200 302 1h;
+      fastcgi_cache_valid 301 1d;
+      fastcgi_cache_valid any 1m;
+      fastcgi_cache_min_uses 1;
+      fastcgi_cache_use_stale error timeout invalid_header http_500;
+    }
+  }
+}
+
+
+
+
+
+
+
+
+
+xcache安装配置：
+# tar xf xcache-1.3.2.tar.gz
+# cd xcache-1.3.2
+# /usr/local/php/bin/phpize
+# ./configure --enable-xcache --with-php-config=/usr/local/php/bin/php-config
+# make && make install
+
+安装结束时，会出现类似如下行：
+Installing shared extensions:     /usr/local/php/lib/php/extensions/no-debug-non-zts-20090626/
+
+# cat xcache.ini >> /usr/local/php/lib/php.ini
+
+接下来编辑/usr/local/php/lib/php.ini，找到zend_extension开头的行，修改为如下行：
+zend_extension = /usr/local/php/lib/php/extensions/no-debug-non-zts-20090626/xcache.so
+
+注意：如果php.ini文件中有多条zend_extension指令行，要确保此新增的行排在第一位。
+
+
+各配置选项说明：
+xcache.admin.user string
+  auth name.
+xcache.admin.pass string
+  Should be md5($your_password), or empty to disable administration.
+xcache.test string
+  Turn on to enable testing functionals. It will be explained where the option is needed.
+xcache.coredump_directory string
+  Directory to save core dump on crash (SIGSEGV SIGABRT). Leave it empty to disable or something like "/tmp/phpcore/" to enable. Make sure it's writable by php (without checking open_basedir).
+xcache.admin.enable_auth string
+  Disable XCache builtin http authentication if you plan on handling authentication yourself. Be aware that any vhost users can set up admin page, if builtin http auth is disabled, they can access the page with out any authentication. So it is suggested that you disable mod_auth for XCache admin pages instead of disabling XCache builtin auth. This option is 1.2.x only since 1.2.1
+
+xcache.cacher boolean
+  Enable or disable opcode cacher. Not available if xcache.size is 0.
+xcache.size int
+  0 to disable, non 0 to enable. Check if your system mmap allows.
+xcache.count int
+  Specify how many chunks to split the cache. see SplittedCache
+xcache.slots size
+  Just a "slots" hint for hash, you can always store count(items) > slots. It can be (count(items) * n) where n is 0.2 to 1, or leave it as is. More slots means faster searching the cache but take more memory.
+xcache.ttl seconds
+  Ttl (Time To Live) value for the php entry (cached opcodes of a file), 0=forever.
+xcache.gc_interval seconds
+  Garbage collection interval.
+xcache.var_size int
+  xcache.var_count int
+xcache.var_slots size
+  Same as above, but for variable data.
+xcache.var_ttl seconds
+  Default ttl for variables api, xcache_(get|set|inc|dec) etc.
+xcache.var_maxttl seconds
+  A longer ttl when using variables api is limited to below max ttl.
+xcache.var_gc_interval seconds
+  Garbage collection interval for variables api.
+xcache.readonly_protection boolean
+  If ReadonlyProtection is turned on, it will be a bit slower, but much safer. This option isn't available for /dev/zero.
+xcache.mmap_path string
+  for *nix, xcache.mmap_path is a file path, not directory. for win32, xcache.mmap_path is anonymous map name, not a file path. Use something like "/tmp/xcache" if you want to turn on ReadonlyProtection, 2 group of php won't share the same /tmp/xcache.
+
+
+
+
+LAMP
+
+memcached
+
+memcache
+
+
+
+
+安装Memcache的PHP扩展
+
+①安装PHP的memcache扩展
+
+# tar xf memcache-2.2.5.tgz
+# cd memcache-2.2.5
+/usr/local/php/bin/phpize
+# ./configure --with-php-config=/usr/local/php/bin/php-config --enable-memcache
+# make && make install
+
+上述安装完后会有类似这样的提示：
+
+Installing shared extensions:     /usr/local/php/lib/php/extensions/no-debug-non-zts-20090626/
+
+②编辑/usr/local/php/lib/php.ini，在“动态模块”相关的位置添加如下一行来载入memcache扩展：
+extension=/usr/local/php/lib/php/extensions/no-debug-non-zts-20090626/memcache.so
+
+
+而后对memcached功能进行测试，在网站目录中建立测试页面test.php，添加如下内容：
+<?php
+  $mem = new Memcache;
+  $mem->connect("127.0.0.1", 11211);
+  $mem->set('mykey', 'Hello World', 0, 600);
+  $val = $mem->get('mykey');
+  echo "$val is from memcached server.";         
+?>
+
+如果有输出“Hello World is from memcached.”，则表明memcache已经能够正常工作。
+
+
+
+
+使用libmemcached的客户端工具:
+
+访问memcached的传统方法是使用基于perl语言开发的Cache::memcached模块，这个模块在大多数perl代码中都能良好的工作，但也有着众所周知的性能方面的问题。libMemcached则是基于C语言开发的开源的C/C++代码访问memcached的库文件，同是，它还提供了数个可以远程使用的memcached管理工具，如memcat, memping，memstat，memslap等。
+
+
+
+编译安装libmemcached
+
+# tar xf libmemcached-1.0.2.tar.gz 
+# cd libmemcached-1.0.2
+# ./configure 
+# make && make install
+# ldconfig
+
+
+
+客户端工具
+# memcat --servers=127.0.0.1:11211 mykey
+# memping 
+# memslap
+# memstat
+
+
+
+
+
+
+
+
+
+
+Secure your upload directory!!
+
+Too many example configs fail to secure the "uploads" directory of the application. Remember that if someone can upload a file named xyz.php and the uploads dir is publically accessible then you have given the attacker an easy way to insert PHP onto your site...
+
+So if your app has an upload dir "/images/" then insert if ($uri !~ "^/images/") before fastcgi_pass, as so:
+
+location ~ \.php$ {
+...
+...
+  if ($uri !~ "^/images/") {
+    fastcgi_pass 127.0.0.1:9000;
+  }
+}
+
+
+www.magedu.com/images/logo.jpg  --> http://img.magedu.com/images/logo.jpg
+
+
+rewirte "/images/\(.*\.jpg\)"  http://img.magedu.com/images/$1
+
+
+
+
+
+
+
+
+
+
+
+
+PDO_MYSQL
+
+PDO_MYSQL is a driver that implements the PHP Data Objects (PDO) interface  to enable access from PHP to MySQL 3.x, 4.x and 5.x databases.
+
+PDO_MYSQL will take advantage of native prepared statement support present in MySQL 4.1 and higher. If you're using an older version of the mysql client libraries, PDO will emulate them for you. 
+
+
+eAccelerator
+
+eAccelerator is a free open-source PHP accelerator & optimizer. It increases the performance of PHP scripts by caching them in their compiled state, so that the overhead of compiling is almost completely eliminated. It also optimizes scripts to speed up their execution. eAccelerator typically reduces server load and increases the speed of your PHP code by 1-10 times.
+
+# tar jxvf eaccelerator-0.9.6.1.tar.bz2
+# cd eaccelerator-0.9.6.1
+# /usr/local/php/bin/phpize
+# ./configure \
+  --enable-eaccelerator=shared \
+  --with-php-config=/usr/local/php/bin/php-config
+# make
+# make install
+
+# vim /usr/local/php/etc/php.ini
+
+添加如下内容：
+  extension="eaccelerator.so"
+  eaccelerator.shm_size="16"
+  eaccelerator.cache_dir="/tmp/eaccelerator"
+  eaccelerator.enable="1"
+  eaccelerator.optimizer="1"
+  eaccelerator.check_mtime="1"
+  eaccelerator.debug="0"
+  eaccelerator.filter=""
+  eaccelerator.shm_max="0"
+  eaccelerator.shm_ttl="0"
+  eaccelerator.shm_prune_period="0"
+  eaccelerator.shm_only="0"
+
+# mkdir /tmp/eaccelerator
+# chmod 0777 /tmp/eaccelerator
+
+
+Configuration Options
+---------------------
+
+eaccelerator.shm_size
+    The amount of shared memory (in megabytes) that eAccelerator will use.
+    "0" means OS default. Default value is "0".
+
+eaccelerator.cache_dir
+    The directory that is used for disk cache. eAccelerator stores precompiled
+    code, session data, content and user entries  here. The same data  can  be
+    stored in shared memory also (for more quick access). Default value is
+    "/tmp/eaccelerator".
+
+eaccelerator.enable
+    Enables or disables eAccelerator. Should be "1" for enabling  or  "0"  for
+    disabling. Default value is "1".
+
+eaccelerator.optimizer
+    Enables or disables internal peephole optimizer which may  speed  up  code
+    execution. Should be "1" for enabling or "0" for disabling. Default  value
+    is "1".
+
+eaccelerator.debug
+    Enables or disables debug logging. Should be "1" for enabling or  "0"  for
+    disabling. Default value is "0".
+
+eaccelerator.check_mtime
+    Enables or disables PHP file modification checking .  Should  be  "1"  for
+    enabling or "0" for disabling. You should set it to "1"  if  you  want  to
+    recompile PHP files after modification. Default value is "1".
+    
+eaccelerator.filter
+    Determine which PHP files must be cached. You may specify  the  number  of
+    patterns (for example "*.php *.phtml") which specifies to cache or not  to
+    cache. If pattern starts with the character "!", it means to ignore  files
+    which are matched by the following pattern. Default value is "" that means 
+    all PHP scripts will be cached.
+
+eaccelerator.shm_max
+    Disables putting large values into shared memory by " eaccelerator_put() "
+    function. It indicates the largest allowed size in bytes (10240, 10K, 1M). 
+    The "0" disables the limit. Default value is "0".
+
+eaccelerator.shm_ttl
+    When eaccelerator fails to get shared memory for new script it removes all
+    scripts which were not accessed  at  last "shm_ttl"  seconds  from  shared
+    memory. Default value is "0" that means -  don't  remove  any  files  from
+    shared memory.
+
+eaccelerator.shm_prune_period
+    When eaccelerator fails to get shared memory for new script  it  tryes  to
+    remove  old  script   if   the   previous   try   was   made   more   then
+    "shm_prune_period" seconds ago. Default value is "0" that  means  -  don't
+    try to remove any files from shared memory.
+
+eaccelerator.shm_only
+    Enables or disables caching of compiled scripts on disk. It has  no  effect
+    on session data and content caching. Default value is "0" that means -  use
+    disk and shared memory for caching.
+
+eaccelerator.allowed_admin_path
+    The script paths that are allowed to get admin information and do admin 
+    controls
+    
+
+
+
+
+
+
+
+
+http://www.a.com
+http://www.b.org/
+
+http://www.a.com/bbs
+
+http://www.a.com/forum
+
+
+URL: http://www.a.com/admin.php?a=3
+
+
+
+rewrite
+rewrite
+
+
+
+The Rewrite Module
+
+www.magedu.com/bbs  论坛
+www.magedu.com/forum  论坛
+
+page:
+图片地址引用：http://172.16.100.4/images/a.jpg
+172.16.100.5
+
+http://www.magedu.com/attatch.php?value=111223
+
+
+
+http://www.magedu.com/111222/attatch
+
+last
+
+
+rewrite ^/(attatch)\.php\?value=(.*)$ /$2/$1 break;
+rewrite
+rewrite
+rewrite
+
+
+
+
+
+
+
+
+
+
+
+SEO
+
+
+URL
+
+rewrite
+
+
+A lot of sites undergo changes, and in some cases complete rewriting. In most cases the earlier contents URLs would have changed, leading to loss of SEO and, of course, inconvenience for older clients. This recipe will help you write simple rewrites so that you can ensure that your new site has all the redirect working.
+
+rewrite指令的语法：
+s@\(patt\)ern@\1@
+
+
+rewrite regex replacement flag
+
+rewrite ^/images/(.*\.jpg)$  /images2/$1 break;
+rewrite ^/abc/.*$ /$1/abc/ last
+
+location / {
+rewrite ^/images/(.*\.jpg)$  /images2/$1 break;
+rewrite ^/abc/.*$ /$1/abc/ last
+}
+
+location /images/ {
+rewrite ^/images/(.*\.jpg)$  /images2/$1 break;
+
+}
+
+location /abc/ {
+rewrite ^/abc/(.*)$ /$1/abc/ last
+}
+
+/abc/hello.html --> /hello.html/abc/
+
+
+
+
+http://172.16.100.1/images2/logo.jpg
+
+
+location / {
+  rewrite ^/images/.*\.jpg$ /images/b.jpg break;
+}
+
+http://172.16.100.1/images/b.jpg
+
+Flags can be any of the following:
+
+last - completes processing of current rewrite directives and restarts the process (including rewriting) with a search for a match on the URI from all available locations.
+break - completes processing of current rewrite directives and non-rewrite processing continues within the current location block only.
+redirect - returns temporary redirect with code 302; it is used if the substituting line begins with http://
+permanent - returns permanent redirect with code 301
+
+
+rewrite "^/test/(.*\.jpg)$" "/test/repire.jpg" break;
+
+rewrite "
+
+
+
+
+set指令
+语法：set variable value
+应用环境: server, location, if
+
+为变量设定值；可以是自定义的变量；
+
+
+一、设置一个简单的URL重写：
+比如，某网站原有的论坛访问路径为/forum/，但后来根据要求需要更改为/bbs，于是，就可以通过下面的方法实现：
+
+rewrite ^/forum/?$ /bbs/ permanent;
+
+http://172.16.100.1/forum/
+
+
+1、if指令：
+语法: if (condition) { ... }
+应用环境: server, location
+
+条件:
+
+1、变量名; false values are: empty string ("", or any string starting with "0";)
+2、对于变量进行的比较表达式，可使用=或!=进行测试;
+3、正则表达式的模式匹配:
+~  区分大小的模式匹配
+~* 不区分字母大小写的模式匹配
+!~ 和 !~* 分别对上面的两种测试取反
+4、测试文件是否存在-f或!-f
+5、测试目录是否存在-d或!-d
+6、测试目录、文件或链接文件的存在性-e或!-e
+7、检查一个文件的执行权限-x或!-x
+
+在正则表达式中，可以使用圆括号标记匹配到的字符串，并可以分别使用$1,$2,...,$9进行引用；
+
+例如：
+判断用户的浏览器类型：
+if ($http_user_agent ~* MSIE) {
+  rewrite  ^(.*)$  /msie/$1  break;
+}
+
+wap.magedu.com
+
+if ($http_user_agent ~* opera) {
+  rewrite  ^(.*)$  /opera/$1  break;
+}
+
+如果用户请求的页面不存在，实现自定义跳转：
+
+if (!-f $request_filename) {
+      rewrite ^(/.*)$ /rewrite.html permanent;
+}
+
+
+
+实现域名跳转
+server
+{
+listen 80;
+server_name jump.magedu.com;
+index index.html index.php;
+root /www/htdocs;
+rewrite ^/ http://www.magedu.com/;
+}
+
+实现域名镜像
+server
+{
+listen 80;
+server_name mirror.magedu.com;
+index index.html index.php;
+root /www/htdocs;
+rewrite ^/(.*)$ http://www.magedu.com/$1 last;
+}
+
+简单的防盗链配置：
+location ~* \.(gif|jpg|png|swf|flv)$ {
+  valid_referers none blocked www.magedu.com;
+  if ($invalid_referer) {
+    rewrite ^/ http://www.magedu.com/403.html;
+    # return 404
+  }
+}
+第一行：gif|jpg|png|swf|flv
+表示对gif、jpg、png、swf、flv后缀的文件实行防盗链
+第二行：www.magedu.com
+表示对www.magedu.com这个来路进行判断if{}里面内容的意思是，如果来路不是指定来路就跳转到错误页面，当然直接返回404也是可以的。
+
+if (!-e $request_filename) {
+      rewrite ^/user/([0-9]+)/?$ /view.php?go=user_$1 last;
+      rewrite ^/component/id/([0-9]+)/?$ /page.php?pageid=$1 last;
+      rewrite ^/component/([^/]+)/?$ /page.php?pagealias=$1 last;
+      rewrite ^/category\_([0-9]+)\.htm$ http://$host/category/$1/ permanent;
+      rewrite ^/showday\_([0-9]+)\_([0-9]+)\_([0-9]+)\.htm$ http://$host/date/$1/$2/$3/ permanent;
+      showday_1_2_3.htm $host/date/1/2/3/
+}
+
+
+
+server {
+  listen 80 default;
+  server_name *.mysite.com;
+  rewrite ^ http://mysite.com$request_uri permanent;
+}
+
+
+
+
+常用的变量：
+
+$arg_PARAMETER        This variable contains the value of the GET request variable PARAMETER if present in the query string.
+$args                 This variable contains the query string in the URL, for example foo=123&bar=blahblah if the URL is http://example1. com/? foo=123&bar=blahblah
+$binary_remote_addr   The address of the client in binary form.
+$body_bytes_sent      The bytes of the body sent.
+$content_length       This variable is equal to line Content-Length in the header of request.
+$content_type         This variable is equal to line Content-Type in the header of request.
+
+$document_root        This variable is equal to the value of directive root for the current request.
+$document_uri         The same as $uri.
+$host                 This variable contains the value of the 'Host' value in the request header, or the name of the server processing if the 'Host' value is not available.
+$http_HEADER          The value of the HTTP header HEADER when converted to lowercase and with "dashes" converted to "underscores", for example, $http_user_agent, $http_referer.
+$is_args              Evaluates to "?" if $args is set, returns "" otherwise.
+$request_uri          This variable is equal to the *original* request URI as received from the client including the args. It cannot be modified. Look at $uri for the post-rewrite/altered URI. Does not include host name. Example: "/foo/bar.php?arg=baz".
+$scheme               The HTTP scheme (that is http, https). Evaluated only on demand, for example: rewrite ^(.+)$ $scheme://example.com$1 redirect;
+$server_addr          This variable contains the server address. It is advisable to indicate addresses correctly in the listen directive and use the bind parameter so that a system call is not made every time this variable is accessed.
+$server_name          The name of the server.
+$server_port          This variable is equal to the port of the server, to which the request arrived.
+$server_protocol      This variable is equal to the protocol of request, usually this is HTTP/1.0 or HTTP/1.1.
+
+$uri                  This variable is equal to current URI in the request (without arguments, those are in $args.) It can differ from $request_uri which is what is sent by the browser. Examples of how it can be modified are internal redirects, or with the use of index. Does not include host name. Example: "/foo/bar.html"
+
+
+
+
+HTTP Headers
+HTTP_USER_AGENT
+HTTP_REFERER
+HTTP_COOKIE
+HTTP_FORWARDED
+HTTP_HOST
+HTTP_PROXY_CONNECTION
+HTTP_ACCEPT
+
+
+
+
+
+Enabling a log file cache：
+
+http {
+...
+open_log_file_cache max=1000 inactive=20s min_uses=2 valid=1m;
+..
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Simple Load Balancing 
+
+http {
+  upstream myproject {
+    server 172.16.100.11:80 weight=3;
+    server 172.16.100.12:80;
+  }
+ 
+  server {
+    listen 80;
+    server_name www.a.com;
+    location / {
+      proxy_pass http://myproject;
+    }
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+location / {
+  proxy_pass        http://10.1.1.2;
+  proxy_set_header  X-Real-IP  $remote_addr;
+}
+
+
+
+
+
+
+
+
+
+
+
+upstream backend  {
+  server backend1.example.com weight=5;
+  server backend2.example.com:8080;
+}
+ 
+server {
+  location / {
+    proxy_pass  http://backend;
+  }
+}
+
+upstream myhttpd  {
+  server 10.1.1.2:80;
+  server 10.1.1.2:8080;
+}
+
+server {
+  location / {
+    proxy_pass  http://myhttpd;
+  }
+
+
+
+location /nginx_status {
+  # copied from http://blog.kovyrin.net/2006/04/29/monitoring-nginx-with-rrdtool/
+  stub_status on;
+  access_log   off;
+  allow SOME.IP.ADD.RESS;
+  deny all;
+}
+
+active connections -- number of all open connections including connections to backends 
+
+server accepts handled requests -- nginx accepted 16630948 connections, handled 16630948 connections (no one was closed just it was accepted), and handles 31070465 requests (1.8 requests per connection) 
+
+reading -- nginx reads request header 
+
+writing -- nginx reads request body, processes request, or writes response to a client 
+
+waiting -- keep-alive connections, actually it is active - (reading + writing)
+
+
+memcached
+
+Memcached is an in-memory key-value store for small chunks of arbitrary data (strings, objects) from results of database calls, API calls, or page rendering.
+
+Memcached is simple yet powerful. Its simple design promotes quick deployment, ease of development, and solves many problems facing large data caches.
+
+
+
+
+
+
+
+
+
+
+
+
+http {
+  proxy_cache_path /var/www/cache levels=1:2 keys_zone=mycache:20m
+  max_size=2048m inactive=60m;
+  proxy_temp_path /var/www/cache/tmp;
+  ...
+  server {
+    listen 80;
+    server_name magedu.com;
+    access_log /var/log/magedu.com/log/access.log;
+    error_log /var/log/magedu.com/log/error.log debug;
+    #set your default location
+    location / {
+      proxy_pass http://172.16.100.6/;
+      proxy_cache mycache;
+      proxy_cache_valid 200 302 60m;
+      proxy_cache_valid 404 1m;
+    }
+  }
+}
+
+
+
+配置：
+
+1、设定错误日志格式及级别：
+
+http {
+log_format combined '$remote_addr - $remote_user [$time_local] '
+        '"$request" $status $body_bytes_sent '
+        '"$http_referer" "$http_user_agent"';
+access_log /var/log/nginx/access.log combined;
+error_log /var/log/nginx/error.log crit;
+...
+}
+
+2、记录类似apache格式的日志：
+log_format main '$remote_addr - $remote_user [$time_local] '
+        '"$request" $status $body_bytes_sent "$http_referer" '
+        '"$http_user_agent" "$http_x_forwarded_for"';
+access_log /var/log/nginx/access.log main;
+
+3、启用日志缓存：
+
+http {
+  ...
+  open_log_file_cache max=1000 inactive=20s min_uses=2 valid=1m;
+  ...
+}
+
+1,1
+
+
+Max        Maximal number of descriptors in the cache, with overflow Least Recently Used removed (LRU)
+Inactive   Sets the time after which descriptor without hits during this time are removed; default is 10 seconds
+min_uses   Sets the minimum number of file usage within the time specified in parameter inactive, after which the file descriptor will be put in the cache; default is 1
+Valid      Sets the time until it will be checked if file still exists under same name; default is 60 seconds
+Off        Disables the cache
+
+
+
+
+设定限速：
+
+1、为某个特定路径限速：
+server {
+    server_name www.magedu.com;
+
+    location /downloads/ {
+        limit_rate 20k;
+        root /web/downloads/;
+    }
+    ..
+}
+
+2、限制搜索引擎的bot速度：
+if ($http_user_agent ~ Google|Yahoo|MSN|baidu) {
+    limit_rate 20k;
+}
+
+
+
+
+
+
+
+The X-Forwarded-For (XFF) HTTP header field is a de facto standard for identifying the originating IP address of a client connecting to a web server through an HTTP proxy or load balancer. This is an HTTP request header which was introduced by the Squid caching proxy server's developers. An effort has been started at IETF for standardizing the Forwarded-For HTTP header.
+
+
+
+
+
+
+
+
+设定反向代理：
+
+简单示例：
+location / {
+  proxy_pass        http://www.internal.com:8080;
+  proxy_set_header  X-Real-IP  $remote_addr;
+}
+
+X-Real-IP: 192.168.0.1
+
+
+
+www.magedu.com
+
+http://www.magedu.com
+
+
+proxy_pass
+  语法：proxy_pass URL;
+  This directive sets the address of the proxied server and the URI to which location will be mapped. Address may be given as hostname or address and port. 例如：
+    proxy_pass http://localhost:8000/uri/;
+
+
+  By default, the Host header from the request is not forwarded, but is set based on the proxy_pass statement. To forward the requested Host header, it is necessary to use:
+
+    proxy_set_header Host $host;
+
+proxy_read_timeout
+  语法：proxy_read_timeout time;
+  This directive sets the read timeout for the response of the proxied server. It determines how long nginx will wait to get the response to a request. The timeout is established not for entire response, but only between two operations of reading.
+
+proxy_send_timeout
+  语法：roxy_send_timeout time;
+  This directive assigns timeout with the transfer of request to the upstream server. Timeout is established not on entire transfer of request, but only between two write operations. If after this time the upstream server will not take new data, then nginx is shutdown the connection.
+
+
+
+nginx和后端http服务器之间的连接是通过http/1.0协议进行的，因此，每连接是单独建立的；但Nginx和客户端的browser之间的会话是基于http/1.1，因此可以实现keep-alive的功能。此外，在响应用户之前，nginx把每一个用户的会话缓存至本地。
+
+
+其它常用指令：
+
+proxy_buffers
+  语法: proxy_buffers the_number is_size;
+  This directive sets the number and the size of buffers, into which will be read the answer, obtained from the proxied server. By default, the size of one buffer is equal to the size of page. 
+  例如：
+  proxy_buffers 32 4k；
+
+proxy_set_header
+  语法：proxy_set_header header value;
+  This directive allows to redefine and to add some request header lines which will be transferred to the proxied server.
+
+  例如：
+  proxy_set_header Host $host;
+  proxy_set_header X-Real-IP $remote_addr;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+proxy_connect_timeout
+  语法：proxy_connect_timeout time;
+  This directive assigns a timeout for the connection to the upstream server. It is necessary to keep in mind that this time out cannot be more than 75 seconds.
+
+proxy_no_cache
+  语法：proxy_no_cache variable1 variable2 ...;
+  定义不进行缓存的情形，例如：
+  proxy_no_cache $cookie_nocache $arg_nocache $arg_comment;
+  proxy_no_cache $http_pragma $http_authorization;
+  
+
+
+为反向代理启用缓存功能：
+
+http {
+    proxy_cache_path  /data/nginx/cache  levels=1:2    keys_zone=STATIC:10m
+                                         inactive=24h  max_size=1g;
+    server {
+        location / {
+            proxy_pass             http://1.2.3.4;
+            proxy_set_header       Host $host;
+            proxy_cache            STATIC;
+            proxy_cache_valid      200  1d;
+            proxy_cache_use_stale  error timeout invalid_header updating
+                                   http_500 http_502 http_503 http_504;
+        }
+    }
+}
+
+
+
+proxy_cache_path
+  语法：proxy_cache_path path [levels=number] keys_zone=zone_name:zone_size [inactive=time] [max_size=size];
+  This directive sets the cache path and other cache parameters. Cached data is stored in files. An MD5 hash of the proxied URL is used as the key for the cache entry, and is also used as the filename in the cache path for the response contents and metadata. 
+  
+  The levels parameter sets the number of subdirectory levels in cache. You may use any combination of 1 and 2 in the level formats: X, X:X, or X:X:X e.g.: "2", "2:2", "1:1:2". There can be at most 3 levels.
+  
+  All active keys and metadata is stored in shared memory. Zone name and the size of the zone is defined via the keys_zone parameter.
+  
+  If cached data is not requested for time defined by the inactive parameter, than that data is removed from the cache. The inactive parameter defaults to 10 minutes (10m).
+  
+  
+proxy_cache
+  语法：proxy_cache zone_name;
+  This directive sets name of zone for caching. The same zone can be used in multiple places.
+  
+  The following response headers flag a response as uncacheable unless they are ignored:
+    Set-Cookie
+    Cache-Control containing "no-cache", "no-store", "private", or a "max-age" with a non-numeric or 0 value
+    Expires with a time in the past
+    X-Accel-Expires: 0
+  
+proxy_cache_valid
+  语法: proxy_cache_valid reply_code [reply_code ...] time;
+  设定对于不同类别应答的缓存时间. Example:
+      proxy_cache_valid  200 302  10m;
+      proxy_cache_valid  404      1m;
+  Also it is possible to cache any replies with parameter "any":
+    proxy_cache_valid  200 302 10m;
+    proxy_cache_valid  301 1h;
+    proxy_cache_valid  any 1m;
+
+
+
+
+
+
+反向代理多台服务器实现负载均衡：
+
+upstream backend {
+  server www1.magedu.com weight=5;
+  server www2.magedu.com max_fails=3 fail_timeout=30s;
+  server www3.magedu.com;
+}
+server {
+  listen 80;
+  server_name example1.com;
+  access_log /var/log/magedu.com/access.log;
+  error_log /var/log/magedu.com/error.log debug;
+  #set your default location
+  location / {
+    include proxy.conf;
+    proxy_pass http://backend;
+  }
+}
+
+
+172.16.0.1
+127.0.0.1:8080
+
+
+server
+  语法：server name [parameters]
+  其中的name可以是FQDN，主机地址，端口或unix套接字；如果FQDN解析的结果为多个地址，则每个地址都会被用到；
+  
+  weight = NUMBER - 设定权重，默认为1.
+  max_fails = NUMBER - 在fail_timeout指令设定的时间内发往此server的不成功的请求次数，达到此数目后，此服务器将变为不可操作状态；默认值为1；设定为0值则禁用此功能；
+  fail_timeout = TIME - 默认为10秒；
+  down - marks server as permanently offline, to be used with the directive ip_hash.
+  backup - (0.6.7 or later) only uses this server if the non-backup servers are all down or busy (cannot be used with the directive ip_hash)
+
+
+
+upstream
+  语法：upstream name { ... }
+  声明一组可以被proxy_pass和fastcgi_pass引用的服务器；这些服务器可以使用不同的端口，并且也可以使用Unix Socket；也可以为服务器指定不同的权重；例如：
+  
+  upstream backend {
+    server backend1.magedu.com weight=5 down backup;
+    server 127.0.0.1:8080     max_fails=3  fail_timeout=30s;
+    server unix:/tmp/backend3;
+  }
+
+
+
+
+
+
+LNMMP = 
+
+
+
+
+安装配置第三方模块，实现upstream中对后端http server的健康状态检测：
+
+模块下载地址：https://github.com/cep21/healthcheck_nginx_upstreams；模块名称：ngx_http_healthcheck_module
+
+安装配置方法：
+1、首先解压healcheck模块到某路径下，这里假设为/tmp/healthcheck_nginx_upstreams
+
+2、对nginx打补丁
+
+首先解压nginx，并进入nginx源码目录：
+# tar xf nginx-1.0.11.tar.gz
+# cd nginx-1.0.11
+# patch -p1 < /tmp/healthcheck_nginx_upstreams/nginx.patch
+
+而后编译nginx，在执行configure时添加类似下面的选项：
+--add-module=/tmp/healthcheck_nginx_upstreams
+
+所以，这里就使用如下命令：
+# ./configure \
+  --prefix=/usr \
+  --sbin-path=/usr/sbin/nginx \
+  --conf-path=/etc/nginx/nginx.conf \
+  --error-log-path=/var/log/nginx/error.log \
+  --http-log-path=/var/log/nginx/access.log \
+  --pid-path=/var/run/nginx/nginx.pid  \
+  --lock-path=/var/lock/nginx.lock \
+  --user=nginx \
+  --group=nginx \
+  --with-http_ssl_module \
+  --with-http_flv_module \
+  --with-http_stub_status_module \
+  --with-http_gzip_static_module \
+  --http-client-body-temp-path=/var/tmp/nginx/client/ \
+  --http-proxy-temp-path=/var/tmp/nginx/proxy/ \
+  --http-fastcgi-temp-path=/var/tmp/nginx/fcgi/ \
+  --with-pcre \
+  --add-module=/tmp/healthcheck_nginx_upstreams
+# make && make install
+
+ngx_http_healthcheck_module模块的使用方法：
+
+1、此模块支持的指令有：
+healthcheck_enabled
+  启用此模块
+  
+healthcheck_delay
+  对同一台后端服务器两次检测之间的时间间隔，单位毫秒，默认为1000；
+  
+healthcheck_timeout
+  进行一次健康检测的超时时间，单位为毫秒，默认值2000；
+
+healthcheck_failcount
+  对一台后端服务器检测成功或失败多少次之后方才确定其为成功或失败，并实现启用或禁用此服务器；
+
+healthcheck_send
+  为了检测后端服务器的健康状态所发送的检测请求；如：healthcheck_send "GET /health HTTP/1.0" 'Host: www.magedu.com';
+  
+healthcheck_expected
+  期望从后端服务器收到的响应内容；如果未设置，则表示从后端服务器收到200状态码即为正确；
+  
+healthcheck_buffer
+  健康状态检查所使用的buffer空间大小；
+
+healthcheck_status
+  通过类似stub_status的方式输出检测信息，使用方法如下：
+  location /stat {
+      healthcheck_status;
+    }
+
+一个例子：
+
+
+http {
+
+  upstream backend {
+    server 127.0.0.1:8080;
+    server 172.16.0.1:80;
+    healthcheck_enabled;
+    healthcheck_delay 1000;
+    healthcheck_timeout 1000;
+    healthcheck_failcount 3;
+    healthcheck_send "GET /.health HTTP/1.0";
+    # Optional supervisord module support
+    #supervisord none;
+    #supervisord_inherit_backend_status;
+  }
+
+  server {
+    listen 80;
+
+    location / {
+      proxy_set_header Host $http_host;
+      proxy_pass http://backend;
+      proxy_connect_timeout 3;
+    }
+    location /stat {
+      healthcheck_status;
+    }
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+Nginx整合memcached:
+
+server {
+        listen       80;
+        server_name  www.magedu.com;
+
+        #charset koi8-r;
+
+        #access_log  logs/host.access.log  main;
+
+        location / {
+                set $memcached_key $uri;
+                memcached_pass     127.0.0.1:11211;
+                default_type       text/html;
+                error_page         404 @fallback;
+        }
+
+        location @fallback {
+                proxy_pass http://172.16.0.1;
+        }
+}
+
+
+
+
+
+
+LAMMP平台
+LNAMMP平台
+nagios监控windows主机和Linux主机
+
+
+MySQL服务常用参数及其意义
+
+
+
+sed, awk, grep
+
+
+
+
+
+
+
+
+upstream memcached {
+    server    127.0.0.1:11211;
+    keepalive 1024;
+}
+ 
+upstream backend {
+    server    127.0.0.1:9000;
+}
+ 
+server {
+    listen          80;
+    server_name     live.framework.com;
+ 
+    access_log      /var/log/nginx/framework.access.log;
+    error_log       /var/log/nginx/framework.errors.log notice;
+ 
+    root            /home/framework;
+ 
+    location / {
+        try_files $uri @missing;
+    }
+ 
+    location @missing {
+        rewrite ^(.*[^/])$ $1/ permanent; # Add a trailing slash if none exist.
+        rewrite ^ /index.php last;
+    }
+ 
+    # Forbid the system dir, but allow media files.
+    location ~* ^/system/.+\.(jpg|png|gif|css|js|swf|flv|ico)$ {
+        expires max;
+        tcp_nodelay off;
+        tcp_nopush on;
+    }
+ 
+    location ~ /system/ {
+        rewrite ^ /index.php last;
+    }
+ 
+    # Check cache and use PHP as fallback.
+    location ~* \.php$ {
+        default_type text/html;
+        charset      utf-8;
+ 
+        if ($request_method = GET) {
+            set $memcached_key fw53$request_uri;
+ 
+            memcached_pass     memcached;
+            error_page         404 502 = @nocache;
+        }
+ 
+        if ($request_method != GET) {
+            fastcgi_pass backend;
+        }
+    }
+ 
+    location @nocache {
+        fastcgi_pass backend;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+

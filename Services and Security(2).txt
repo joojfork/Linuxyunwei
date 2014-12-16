@@ -1,0 +1,708 @@
+
+RPC: 
+
+RPC is a powerful technique for constructing distributed, client-server based applications. 
+用于开发分布式、C/S架构应用程序的技术。
+
+It is based on extending the notion of conventional, or local procedure calling, so that the called procedure need not exist in the same address space as the calling procedure. 
+RPC根植于本地过程调用的思想，所不同的是，RPC所涉及到的进程可以位于不同的主机。
+
+By using RPC, programmers of distributed applications avoid the details of the interface with the network. The transport independence of RPC isolates the application from the physical and logical elements of the data communications mechanism and allows the application to use a variety of transports.
+
+An RPC is analogous to a function call. Like a function call, when an RPC is made, the calling arguments are passed to the remote procedure and the caller waits for a response to be returned from the remote procedure.
+
+The client makes a procedure call that sends a request to the server and waits. The thread is blocked from processing until either a reply is received, or it times out. When the request arrives, the server calls a dispatch routine that performs the requested service, and sends the reply to the client. After the RPC call is completed, the client program continues. 
+
+
+A remote procedure is uniquely identified by the triple: (program number, version number, procedure number) The program number identifies a group of related remote procedures, each of which has a unique procedure number. A program may consist of one or more versions. Each version consists of a collection of procedures which are available to be called remotely. Version numbers enable multiple versions of an RPC protocol to be available simultaneously. Each version contains a a number of procedures that can be called remotely. Each procedure has a procedure number.
+
+程序号、版本号和过程号。程序号用于将一组相关的remote procedure关联起来，这组rp，每个都有其过程号。一个程序可以包含一个或多个不同的版本，每个版本都包含了一组可被远程调用的procedure，由此实现了多版本并存。
+
+Portmap is a server application that will map a program number and its version number to the internet port number used by the program. Because Portmap is assigned a reserved (well-known service) port number 111, all the caller has to do is ask the Portmap service on the remote host about the port used by the desired program. Portmap only knows about RPC programs on the host it runs on (only RPC programs on the local host).
+Portmap是一个Server，用于实现映射程序号和版本号至端口号，以便远程主机对其进行调用。Portmap自身监听在111端口，因此，所有的调用者对通过此端口向Portmap询问其期望通信的程序所监听的端口。但Portmap仅知悉当前主机的RPC。
+
+In order for Portmap to know about the RPC program, every RPC program should register itself with the local Portmap when it starts up. It should also cancel its registration when it closes down.
+启动时，每个RPC程序必须向Portmap进行注册，而在关闭时需要进行注销。
+
+Normally, the calling application would contact Portmap on the destination host to obtain the correct port number for a particular remote program, and then send the call message to this particular port. A variation exists when the caller also sends the procedure data along to Portmap and then the remote Portmap directly invokes the procedure.
+正常情况下，调用者首先与Portmap通信以获取其期望通信的远程程序所监听的端口，然后通过获取到的端口向对应的远程程序发送报文。
+
+
+RPC Application Development
+
+To develop an RPC application the following steps are needed: 
+•	Specify the protocol for client server communication ：选定客户端与服务器端通信时使用的协议
+•	Develop the client program ：开发客户端
+•	Develop the server program ：开发服务端
+
+The programs will be compiled separately. The communication protocol is achieved by generated stubs and these stubs and rpc (and other libraries) will need to be linked in. 
+
+
+
+XML-RPC is a remote procedure call (RPC) protocol which uses XML to encode its calls and HTTP as a transport mechanism. "XML-RPC" also refers generically to the use of XML for remote procedure call, independently of the specific protocol. This article is about the protocol named "XML-RPC".
+
+
+表征状态转移（英文：Representational State Transfer，简称REST）是Roy Fielding博士在2000年他的博士论文中提出来的一种软件架构风格。
+目前在三种主流的Web服务实现方案中，因为REST模式的Web服务与复杂的SOAP和XML-RPC对比来讲明显的更加简洁，越来越多的web服务开始采用REST风格设计和实现。例如，Amazon.com提供接近REST风格的Web服务进行图书查找；雅虎提供的Web服务也是REST风格的。
+
+REST从资源的角度来观察整个网络，分布在各处的资源由URI确定，而客户端的应用通过URI来获取资源的表征。获得这些表征致使这些应用程序转变了其状态。随着不断获取资源的表征，客户端应用不断地在转变着其状态，所谓表征状态转移（Representational State Transfer）。
+
+REST is an architecture style for designing networked applications. The idea is that, rather than using complex mechanisms such as CORBA, RPC or SOAP to connect between machines, simple HTTP is used to make calls between machines.
+
+RESTful applications use HTTP requests to post data (create and/or update), read data (e.g., make queries), and delete data. Thus, REST uses HTTP for all four CRUD (Create/Read/Update/Delete) operations.
+
+REST is a lightweight alternative to mechanisms like RPC (Remote Procedure Calls) and Web Services (SOAP, WSDL, et al.).
+
+
+
+In general: RPC is any mechanism that allows you to execute methods remotely (although some technologies adapted that as a proper name, it's a general name for many such technologies). This includes CORBA, Java RMI, SOAP-based Web Services, and REST. Some of these systems use binary data transfer (CORBA, Java RMI), and others are text-based; some of the text-based ones are actually XML-based.
+RPC指允许执行远程方法的任何机制，包括如CORBA、JAVA RMI、SOAP-based web服务，以及REST。这些系统有的基于二进制格式实现数据传输，有的基于文本格式进行。
+
+CORBA(Common Object Request Broker Architecture)
+SOAP(Simple Object Access Protocol)
+
+
+XMLRPC is a general name for any XML-based RPC system, i.e., a system where the data that passes between client and server is XML data. There are generic XMLRPC systems (Java's JAX-RPC comes to mind) but when discussing XMLRPC, the key technology is SOAP-based Web Services.
+XML-PRC指基于XML的RPC。
+
+Web services is a generic name for web-based RPC. This includes SOAP-based web services, which normally go by the proper name "Web Services"; but now, REST is also considered a web-service architecture.
+
+SOAP is an XMLRPC web service, i.e., a web-based RPC that uses XML for data transfer, and more specifically, it uses the SOAP data format (an XML schema) for the queries and their replies.
+
+REST is a non-XML-based, web-based RPC; but it is also a design philosophy and architecture. Read this tutorial site for more details.
+
+
+NFS: Network File System
+
+ext3, ext2: Kernel Space
+
+mke2fs: 用户空间，文件系统管理工具
+
+NFS: 
+
+
+RPC: Remote Procedure Call
+	
+
+Linux: 提供rpc服务的程序， Portmap: 111/tcp, 111/udp
+
+RPC: 编程技术，简化分布式应用程序的开发，RPC：C --> RPC C --> RPC S --> S
+
+NFS Client --> NFS Server
+
+
+Browser --> Server  html格式
+
+RPC: 二进制格式，文本格式(XMLRPC) --> SOAP(Simple Object Access Protocol)
+
+RPC: 编程技术，协议
+
+
+NFS: Sun 
+	NFSv2, NFSv3, NFSv4
+
+
+NFS: Unix/Linux
+
+Windows
+
+
+服务器端：nfs-utils
+
+nfs: nfsd(nfs服务), mountd(挂载), quotad(配额)
+
+nfsd: 2049/tcp, 2049/udp
+mountd: 端口
+quotad: 端口
+	半随机的
+
+
+/etc/exports
+/path/to/somedir CLIENT_LIST
+	多个客户之间使用空白字符分隔
+
+每个客户端后面必须跟一个小括号，里面定义了此客户访问特性，如访问权限等
+
+172.16.0.0/16(ro,async) 192.16.0.0/24(rw,sync)
+
+showmount -e NFS_SERVER: 查看NFS服务器“导出”的各文件系统
+showmount -a NFS_SERVER: 查看NFS服务器所有被挂载的文件系统及其挂载的客户端对应关系列表
+showmount -d NFS_SERVER: 显示NFS服务器所有导出的文件系统中被客户端挂载了文件系统列表
+
+
+
+exportfs命令：
+	-a：跟-r或-u选项同时使用，表示重新挂载所有文件系统或取消导出所有文件系统；
+	-r: 重新导出
+	-u: 取消导出
+	-v: 显示详细信息
+
+
+
+客户端使用mount命令挂载
+
+mount -t nfs NFS_SERVER:/PATH/TO/SOME_EXPORT  /PATH/TO/SOMEWHRERE
+
+
+
+文件系统导出属性：
+	ro:
+	rw:
+	sync:
+	async:
+	root_squash: 将root用户映射为来宾账号；
+	no_root_squash: 
+	all_squash: 
+	anonuid, anongid: 指定映射的来宾账号的UID和GID；
+
+
+让mountd和quotad等进程监听在固定端口，编辑配置文件/etc/sysconfig/nfs
+
+
+
+WebServer: LAMP
+
+NFS服务端：/var/www: 共享出去
+NFS客户端：挂载NFSERVER:/var/www至本地的/var/www
+
+
+
+
+
+
+Linux：网络防火墙
+	netfilter: Frame
+	iptables: 数据报文过滤，NAT、mangle等规则生成的工具；
+
+网络：IP报文首部，TCP报文首部
+
+
+
+防火墙：硬件，软件: 规则（匹配标准，处理办法）
+
+Framework: 
+	默认规则：
+		开放：堵
+		关闭：通
+
+规则：匹配标准
+	IP: SIP, DIP
+	TCP: SPORT, DPORT,                SYN=1,FIN=0,RST=0,ACK=0;   SYN=1,ACK=1,FIN=0,RST=0; ACK=1,SYN=0,RST=0,FIN=0(ESTABLISHED)
+	UDP: SPORT, DPORT
+	ICMP：icmp-type
+
+
+数据报文过滤：
+
+OpenBSD
+
+Linux2.0
+	ipfw/firewall
+
+Linux2.2
+	ipchain/firewall
+
+Linux2.4
+	iptables/netfilter
+
+
+hook function: 钩子函数
+	prerouting
+	input
+	output
+	forward
+	postrouting
+
+
+	规则链：
+		PREROUTING
+		INPUT
+		FORWARD
+		OUTPUT
+		POSTROUTING
+
+filter(过滤)：表
+	INPUT
+	OUTPUT
+	FORWARD
+
+nat(地址转换)：表
+	PREROUTING
+	OUTPUT
+	POSTROUTING
+
+mangle(拆开、修改、封装)：表
+	PREROUTING
+	INPUT
+	FORWARD
+	OUTPUT
+	POSTROUTING
+
+raw():
+	PREROUTING
+	OUTPUT
+
+
+
+
+iptables：
+
+
+500条规则
+
+能否使用自定义链？
+	可以使用自定链，但只在被调用时才能发挥作用，而且如果没有自定义链中的任何规则匹配，还应该有返回机制；
+
+	用可以删除自定义的空链
+	默认链无法删除
+
+每个规则都有两个内置的计数器:
+	被匹配的报文个数
+	被匹配的报文大小之和
+
+
+规则：匹配标准，处理动作
+
+iptables [-t TABLE] COMMAND CHAIN [num] 匹配标准 -j 处理办法
+
+
+匹配标准：
+	通用匹配
+		-s, --src: 指定源地址
+		-d, --dst：指定目标地址
+		-p {tcp|udp|icmp}：指定协议
+		-i INTERFACE: 指定数据报文流入的接口
+			可用于定义标准的链：PREROUTING,INPUT,FORWARD
+		-o INTERFACE: 指定数据报文流出的接口
+			可用于标准定义的链：OUTPUT,POSTROUTING,FORWARD
+	扩展匹配
+		隐含扩展：不用特别指明由哪个模块进行的扩展，因为此时使用-p {tcp|udp|icmp}
+		显式扩展：必须指明由哪个模块进行的扩展，在iptables中使用-m选项可完成此功能
+
+
+-j TARGET
+	ACCEPT
+	DROP
+	REJECT
+
+iptables -t filter -A INPUT -s 172.16.0.0/16 -d 172.16.100.7 -j DROP
+
+
+
+iptables/netfilter:
+
+表：
+	filter、nat、mangle和raw
+
+链：
+	PREROUTING、INPUT、FORWARD、OUTPUT和POSTROUTING
+
+filter:
+	INPUT、FORWARD和OUTPUT
+
+nat:
+	PREROUTING(DNAT)、OUTPUT、POSTROUTING(SNAT)
+
+mangle:
+	PREROUTING、INPUT、FORWARD、OUTPUT和POSTROUTING
+
+raw:
+	PREROUTING、OUTPUT
+
+
+netfilter: Framework, TCP/IP，内核中
+
+iptables: 
+
+iptables [-t TABLE] COMMAND CHAIN [num] 匹配条件 -j 处理动作
+
+匹配条件
+	通用匹配
+		-s
+		-d
+		-p {tcp|udp|icmp}
+		-i
+		-o
+	扩展匹配
+		隐含扩展
+			-p tcp
+				--sport PORT[-PORT]: 源端口
+				--dport PORT[-PORT]: 目标端口
+				--tcp-flags mask comp: 只检查mask指定的标志位，是逗号分隔的标志位列表；comp：此列表中出现的标记位必须为1，comp中没出现，而mask中出现的，必须为0；
+					--tcp-flags SYN,FIN,ACK,RST SYN = --syn
+				--syn
+
+			-p icmp
+				--icmp-type 
+					0: echo-reply
+					8: echo-request
+
+			-p udp
+				--sport
+				--dport
+
+			-p tcp --dport
+		显式扩展: 使用额外的匹配机制
+			-m EXTESTION --spe-opt
+
+			state: 状态扩展
+				结合ip_conntrack追踪会话的状态
+					NEW: 新连接请求
+					ESTABLISHED：已建立的连接
+					INVALID：非法连接
+					RELATED：相关联的
+				-m state --state NEW,ESTABLISHED -j ACCEPT
+
+				首先要装载ip_conntrack_ftp和ip_nat_ftp模块
+
+				iptables -A INPUT -d 172.16.100.7 -p tcp -m state --state ESTABLISHED,RELATED -j ACCEPT
+
+			multiport: 离散的多端口匹配扩展
+				--source-ports
+				--destination-ports
+				--ports
+
+			-m multiport --destination-ports 21,22,80 -j ACCEPT
+
+条件取反：!，-s ! 172.16.100.6
+
+
+
+命令：
+	管理规则
+		-A：附加一条规则，添加在链的尾部
+		-I CHAIN [num]: 插入一条规则，插入为对应CHAIN上的第num条；
+		-D CHAIN [num]: 删除指定链中的第num条规则；
+		-R CHAIN [num]: 替换指定的规则；
+	管理链：
+		-F [CHAIN]：flush，清空指定规则链，如果省略CHAIN，则可以实现删除对应表中的所有链
+		-P CHAIN: 设定指定链的默认策略；
+		-N：自定义一个新的空链
+		-X: 删除一个自定义的空链
+		-Z：置零指定链中所有规则的计数器；
+		-E: 重命名自定义的链；
+	查看类：
+		-L: 显示指定表中的规则；
+			-n: 以数字格式显示主机地址和端口号；
+			-v: 显示链及规则的详细信息
+			-vv: 
+			-x: 显示计数器的精确值
+			--line-numbers: 显示规则号码
+
+动作(target)：
+	ACCEPT：放行
+	DROP：丢弃
+	REJECT：拒绝
+	DNAT：目标地址转换
+	SNAT:源地址转换
+	REDIRECT：端口重定向
+	MASQUERADE：地址伪装
+	LOG：日志
+	MARK：打标记
+
+
+
+iptables -t filter -A INPUT -s 172.16.0.0/16 -j DROP
+
+
+
+172.16.100.7，sshd：22/tcp
+
+iptables -t filter -A INPUT -s 172.16.0.0/16 -d 172.16.100.7 -p tcp --dport 22 -j ACCEPT
+iptables -t filter -A OUTPUT -s 172.16.100.7 -d 172.16.0.0/16 -p tcp --sport 22 -j ACCEPT
+
+
+
+
+iptables不是服务，但有服务脚本；服务脚本的主要作用在于管理保存的规则
+	装载及移除iptables/netfilter相关的内核模块；
+		iptables_nat, iptables_filter, iptables_mangle, iptables_raw, ip_nat, ip_conntrack
+
+
+
+
+
+
+
+
+
+
+/proc/net/ip_conntrack
+/proc/sys/net/ipv4/ip_conntrack_max
+
+cat /proc/slabinfo
+
+
+
+iptstate
+
+
+ip_conntrack_tcp_timeout_established默认情况下 timeout 是5天（432000秒）
+目录：/proc/sys/net/ipv4/netfilter/
+
+
+
+
+
+保存规则：
+	# service iptables save
+		/etc/sysconfig/iptables
+	# iptables-save > /etc/sysconfig/iptables.2013041801
+	# iptables-restore < /etc/sysconfig/iptables.2013041801
+
+
+Server: 172.16.100.7
+
+sshd, httpd
+
+
+iptables/netfilter:
+netfilter: TCP/IP, 
+	PREROUTING, INPUT, FORWARD, OUTPUT, POSTROUTING
+
+表：
+	filter, nat, mangle, raw
+
+iptables [-t table] COMMAND CHAIN [#] 匹配标准 -j 目标
+
+COMMAND:
+	规则：
+		-A
+		-I
+		-D
+		-R
+	链：
+		-F
+		-Z
+		-N
+		-X
+		-P
+		-E
+	查看：
+		-L
+			-n
+			-x
+			-v
+			--line-numbers
+
+匹配标准：
+	通用匹配
+		-s
+		-d
+		-p
+		-i
+		-o
+	扩展匹配
+		隐含扩展
+			-p tcp
+				--dport
+				--sport
+				--tcp-flags mask comp
+					--tcp-flags SYN,ACK,RST,FIN SYN
+				--syn
+			-p udp
+				--sport
+				--dport
+			-p imcp
+				--icmp-type
+					8: echo-request
+					0: echo-reply
+		显式扩展
+			-m EXTENDSION_NAME --specific-opt
+
+			-m state --state
+				ip_conntrack: 连接追踪
+					udp, tcp, icmp
+						/proc/net/ip_conntrack
+						/proc/sys/net/ipv4/ip_conntrack_max
+						/proc/sys/net/ipv4/netfilter/
+				NEW, ESTABLISHED, RELATED, INVALID
+
+			-m multiport : 使用离散端口
+				--source-ports
+				--destination-ports
+				--ports
+
+			-m iprange
+				--src-range
+				--dst-range
+
+				-s, -d
+				-s IP, NET
+					172.16.0.0/16, 172.16.100.3-172.16.100.100
+
+				iptables -A INPUT -p tcp -m iprange --src-range 172.16.100.3-172.16.100.100 --dport 22 -m state --state NEW,ESTABLISHED -j ACCEPT
+
+			-m connlimit: 连接数限制
+				! --connlimit-above n
+
+					iptables -A INPUT -d 172.16.100.7 -p tcp --dport 80 -m connlimit --connlimit-above 2 -j ACCEPT
+			
+			-m limit
+				--limit RATE
+				--limit-burst 
+
+			-m string
+				--algo {bm|kmp}
+				--string "STRING"
+
+-j TARGET
+	LOG
+		--log-prefix "STRING"
+
+
+NAT
+FORWARD
+
+
+
+练习：判断下述规则的意义：
+# iptables -N clean_in
+# iptables -A clean_in -d 255.255.255.255 -p icmp -j DROP
+# iptables -A clean_in -d 172.16.255.255 -p icmp -j DROP
+
+# iptables -A clean_in -p tcp ! --syn -m state --state NEW -j DROP
+# iptables -A clean_in -p tcp --tcp-flags ALL ALL -j DROP
+# iptables -A clean_in -p tcp --tcp-flags ALL NONE -j DROP
+# iptables -A clean_in -d 172.16.100.7 -j RETURN 
+
+
+# iptables -A INPUT -d 172.16.100.7 -j clean_in
+
+# iptables -A INPUT  -i lo -j ACCEPT
+# iptables -A OUTPUT -o lo -j ACCEPT
+
+
+# iptables -A INPUT  -i eth0 -m multiport -p tcp --dports 53,113,135,137,139,445 -j DROP
+# iptables -A INPUT  -i eth0 -m multiport -p udp --dports 53,113,135,137,139,445 -j DROP
+# iptables -A INPUT  -i eth0 -p udp --dport 1026 -j DROP
+# iptables -A INPUT  -i eth0 -m multiport -p tcp --dports 1433,4899 -j DROP
+
+# iptables -A INPUT  -p icmp -m limit --limit 10/second -j ACCEPT
+
+
+
+
+利用iptables的recent模块来抵御DOS攻击
+
+
+ssh: 远程连接，
+
+iptables -I INPUT -p tcp --dport 22 -m connlimit --connlimit-above 3 -j DROP
+iptables -I INPUT  -p tcp --dport 22 -m state --state NEW -m recent --set --name SSH
+iptables -I INPUT  -p tcp --dport 22 -m state --state NEW -m recent --update --seconds 300 --hitcount 3 --name SSH -j DROP
+
+
+1.利用connlimit模块将单IP的并发设置为3；会误杀使用NAT上网的用户，可以根据实际情况增大该值；
+
+2.利用recent和state模块限制单IP在300s内只能与本机建立3个新连接。被限制五分钟后即可恢复访问。
+
+下面对最后两句做一个说明：
+
+1.第二句是记录访问tcp 22端口的新连接，记录名称为SSH
+--set 记录数据包的来源IP，如果IP已经存在将更新已经存在的条目
+
+2.第三句是指SSH记录中的IP，300s内发起超过3次连接则拒绝此IP的连接。
+--update 是指每次建立连接都更新列表；
+--seconds必须与--rcheck或者--update同时使用
+--hitcount必须与--rcheck或者--update同时使用
+
+3.iptables的记录：/proc/net/ipt_recent/SSH
+
+
+也可以使用下面的这句记录日志：
+iptables -A INPUT -p tcp --dport 22 -m state --state NEW -m recent --update --name SSH --second 300 --hitcount 3 -j LOG --log-prefix "SSH Attack"
+
+
+
+
+layer7 -- l7
+
+应用：xunlei, qq, netfilter<--patch
+
+-m layer7 --l7proto xunlei -j DROP
+
+1、给内核打补丁，并重新编译内核
+2、给iptables源码打补丁，并重新编译iptables
+3、安装l7proto
+
+kernel, patch
+
+iptables, patch
+
+
+
+Kernel Patch
+# tar zxvf  linux-2.6.28.10.tar.gz  -C  /usr/src
+# tar zxvf  netfilter-layer7-v2.22.tar.gz  -C  /usr/src
+# cd /usr/src
+# ln –s  linux-2.6.28.10  linux
+# cd /usr/src/linux/
+# patch -p1  <  ../netfilter-layer7-v2.22/kernel-2.6.25-2.6.28-layer7-2.22.patch 
+
+# cp /boot/config-2.6.18-164.el5  /usr/src/linux/.config
+# make  menuconfig
+
+
+Networking support → Networking Options →Network packet filtering framework →Core Netfilter Configuration
+<M>  Netfilter connection tracking support 
+<M>  “layer7” match support
+<M>  “string” match support
+<M>  “time”  match support
+<M>  “iprange”  match support
+<M>  “connlimit”  match support
+<M>  “state”  match support
+<M>  “conntrack”  connection  match support
+<M>  “mac”  address  match support
+<M>   "multiport" Multiple port match support
+
+
+Networking support → Networking Options →Network packet filtering framework → IP: Netfilter Configuration
+<M> IPv4 connection tracking support (required for NAT)
+<M>   Full NAT
+	<M>     MASQUERADE target support                                                                                   
+	<M>     NETMAP target support                                                                               
+	<M>     REDIRECT target support 
+
+
+# make 
+# make modules_install
+# make install
+
+
+Compiles iptables :
+
+# cp /etc/init.d/iptables ~/iptables
+# cp /etc/sysconfig/iptables-config ~/
+# rpm  -e  iptables-ipv6  iptables  iptstate  --nodeps
+# tar jxvf iptables-1.4.6.tar.bz2 –C  /usr/src
+# cd /usr/src/iptables-1.4.6
+# cp ../netfilter-layer7-v2.22/iptables-1.4.3forward-for-kernel-2.6.20forward/libxt_layer7.*   ./extensions/
+
+
+# ./configure  --prefix=/usr  --with-ksource=/usr/src/linux
+# make
+# make install
+
+
+
+
+# tar zxvf l7-protocols-2009-05-28.tar.gz
+# cd l7-protocols-2009-05-28
+# make install
+
+# mv ~/iptables  /etc/rc.d/init.d/
+
+# service iptables start
+
+
+l7-filter uses the standard iptables extension syntax 
+# iptables [specify table & chain] -m layer7 --l7proto [protocol name] -j [action] 
+
+
+
+
+
+
+
+

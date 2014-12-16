@@ -1,0 +1,1202 @@
+
+MySQL复制、MySQL-proxy
+
+MariaDB, PerconaDB
+
+MySQL HA
+
+Web: Nginx, LNMP, Memcached, haproxy, tomcat, varnish
+
+
+HTTP服务器，
+反向代理：reverse proxy
+	http
+	mail
+
+C10k 
+
+
+单进程：阻塞
+多进程：每个进程响应一个请求
+	进程量大，进程切换次数过多
+	每个进程的地址空间是独立，很多空间是重复的数据，所以内存使用效率较低
+
+线程：thread,
+	Light Weight Process, LWP
+		Linux支持多少种类型的线程库？如何切换线程库？
+
+	每个线程响应一个请求：
+		线程依然切换：切换较之进程属于轻量级
+		同一个进程的线程可以共享进程的诸多资源，比如打开的文件；
+		对内存的需求较之进程略有下降；
+		快速银的时会带来线程抖动
+		10K
+
+	多进程多线程
+
+多线程：N个请求
+	一个线程响应多个请求
+
+
+多路IO， IO复用；
+
+
+
+
+httpd:
+	MPM
+		prefork: 一个进程响应一个请求，1024
+		worker: 一个线程响应一个请求，多进程，一个进程生成多个线程
+		event：基于事件驱动，
+
+
+keepalived + ningx: 实现高可用
+	corosync + ningx
+
+IO: 模型
+
+nginx:
+	web服务器
+	反向代理
+		web
+		mail
+
+	模块化
+
+	Tengine
+
+	varnish, squid
+		nginx: cache(disk)
+		httpd: cache(disk, memory)
+
+		memcached
+
+	nginx热部署：平滑升级
+
+
+	referer
+
+
+nginx:
+	server{}： 虚拟主机
+	location{}:
+
+	location /URI/ {
+		root "/web/htdocs";
+	}
+
+
+httpd:
+	<DocumentRoot "">
+
+	</DocumentRoot>
+
+	<Location "/bbs">
+
+	</Location>
+
+URI路径：
+	http://www.magedu.com/
+
+
+location [ = | ~ | ~* | ^~ ] uri { ... }
+
+location URI {}:
+	对当前路径及子路径下的所有对象都生效；
+
+location = URI {}:
+	精确匹配指定的路径，不包括子路径，因此，只对当前资源生效；
+
+location ~ URI {}:
+location ~* URI {}:
+	模式匹配URI，此处的URI可使用正则表达式，~区分字符大小写，~*不区分字符大小写；
+
+location ^~ URI {}:
+	不使用正则表达式
+
+
+/a/3.gif
+
+
+htpasswd: 
+	第二次不能使用-c选项；
+
+已经接受连接的个数，已经处理的连接的个数，已经处理的请求的个数；
+reading: nginx正在读取其首部请求的个数；
+writing: nginx正在读取其主体的请求的个数、正处理着其请求内容的请求的个数或者正在向其客户发送响应的个数；
+waiting: 长连接模式的保持的连接个数
+
+
+
+LEMP:
+PHP+MySQL
+
+FastCGI: 
+
+php-fpm:
+	127.0.0.1:9000
+
+编译：php
+
+
+LEMP: RHEL 6.4 + Nginx-1.4.1 + MySQL-5.6.10 + php-5.4.13 + Xcache-3
+
+Nginx:
+	
+李叔同：有智而性缓者斯大智，有才而气和者定为大才；
+
+王阳明：知行合一
+
+
+Nginx:
+
+IO模型：
+	阻塞
+	非阻塞
+	同步：
+	异步：
+
+同步阻塞：
+异步阻塞：IO复用
+异步阻塞：event-driven
+
+
+
+异步非阻塞：aio
+
+
+Nginx: 
+	mmap
+	event-driven
+		一个进程响应多个请求：单线程进程
+	aio
+
+LEMP:
+	Enginx (FastCGI) + php-fpm
+
+
+location ~* \.php$ {
+	fastcgi_pass 127.0.0.1:9000;
+}
+
+fastcgi
+
+Nginx配置文件
+main, 
+	worker_process
+	error_log
+	user
+	group
+
+
+events {
+	
+}
+事件驱动相关
+
+httpd {
+	
+}
+关于http相关的配置
+
+server {
+	
+}
+虚拟主机
+
+location URI {
+	directive <parameters>;	
+}
+
+URI访问属性；
+
+
+
+上下文
+
+
+
+server {
+	listen 80;
+	server_name www.magedu.com;
+	location / {
+		后端服务器；
+	}
+}
+
+反向代理：
+proxy_pass
+
+location [op] URI {
+	http://172.16.100.11/;
+}
+
+~
+~*
+^~
+=
+
+location @name
+
+location /forum/ {
+	proxy_pass http://172.16.100.11:8080/bbs/;
+}
+
+
+http://www.magedu.com/forum/
+	--> http://172.16.100.11:8080/bbs/;
+
+location ~* ^/forum {
+	proxy_pass http://172.16.100.11:8080/bbs;
+}
+
+http://www.magedu.com/forum/ -->
+	http://172.16.100.11:8080/forum/
+
+
+
+
+proxy_set_header X-Real-IP $remote_addr
+
+
+
+GET、POST、HEAD、PUT、TRACE、OPTIONS、CONNECTION、DELETE
+
+
+nginx:
+	round-robin
+	ip_hash
+	least_conn
+
+Nginx,
+	cache: 共享内存：存储键和缓存对象元数据
+		   磁盘空间：存储数据
+
+	proxy_cache_path: 不能定义在server{}上下文中；
+
+
+缓存目录：子目录级别
+
+
+
+proxy_cache_path /nginx/cache/first levels=1:2:1 keys_zone=first:20m max_size=1G;
+
+cache_manager: LRU
+
+
+WebDAV （Web-based Distributed Authoring and Versioning） 一种基于 HTTP 1.1协议的通信协议。它扩展了HTTP 1.1，在GET、POST、HEAD等几个HTTP标准方法以外添加了一些新的方法，使应用程序可直接对Web Server直接读写，并支持写文件锁定(Locking)及解锁(Unlock)，还可以支持文件的版本控制。
+
+
+
+
+
+
+另外常用的三种缓存：
+	open_log_cache：日志缓存
+	open_file_cache：
+	fastcgi_cache：
+
+而nginx的limit限制也基于共享内存实现。
+
+
+
+nginx: gzip
+
+
+
+upstream phpsrvs {
+	server 
+	server
+}
+
+upstream imgsrvs {
+	server
+	server 
+}
+
+upstream staticfilesrvs {
+	server
+	server
+}
+
+location / {
+	root /web/htdocs;
+	index index.php index.html;
+}
+
+location ~* \.php$ {
+	fastcgi_pass http://phpsrvs;
+}
+
+location ~* "\.(jpg|jpeg|gif|png)$" {
+	proxy_pass http://imgsrvs;
+}
+
+
+
+rewirte: URL重写模块
+	if (condition) {
+
+	}
+
+测试：
+	双目测试：
+		~, !~
+		=, !=
+		~*, !~*
+
+	if ($request_method="POST") {
+
+	}
+
+	if ($request_uri ~* "/forum") {
+
+	}
+
+	单目测试：
+
+referer: 
+
+
+location /images/ {
+		rewrite http://172.16.100.19/images/
+}
+
+支持正则表达式：
+
+
+location / {
+	root html;
+	index index.html;
+	rewrite "^/bbs/(.*)/images/(.*)\.jpg$" http://www.magedu.com/bbs/$2/images/$1.jpg last;
+}
+
+http://www.magedu.com/bbs/a/images/b.jpg --> http://www.magedu.com/bbs/b/images/a.jpg --> http://www.magedu.com/bbs/a/images/b.jpg
+
+
+http://www.magedu.com/bbs/index.html --> http://www.magedu.com/forum/index.html
+
+
+
+last: 本次重写完成之后，重启下一轮检查；
+break: 本次重写完成之后，直接执行后续操作；
+
+
+
+httpwatch
+
+
+
+
+
+key: value
+
+name: Jerry
+
+http web object: memcached
+
+http://www.magedu.com/index.html
+
+
+xml: 
+
+	get
+	set
+
+memcached: 缓存服务器，但本身无法决定缓存任何数据
+	一半依赖于客户端，一半依赖于服务器
+
+	set key 5 60 hello
+
+	lazy: 惰性， LRU，最近最少使用
+
+	内存缓存服务器：
+		48bytes
+		1MB
+
+	index.html: 10K
+	test.jpg: 34K
+
+
+buddy system: 伙伴系统
+	避免内存外碎片
+slab allocator: slab分配器
+	避免内存内碎片
+
+memcached: 不通信分布式缓存服务器	
+
+	
+event-driven:
+	libevent
+
+
+memcached
+	-p: TCP port, 11211
+	-m #: 以MB为单位，指定memcached可用的最大内存
+	
+
+
+Reverse Proxy: http, pop3/imap4
+web server
+
+Nginx: 
+	反向代理 URI, 代理后端某服务器；
+
+	proxy_pass, rewrite
+
+	upstream：将一组后端计算机定义集群
+		rr
+		ip_hash
+		least_conn：最少连接
+			lc, wlc
+
+	proxy:
+
+
+/bbs
+/php
+
+/images
+
+worker_process :
+	CPU: 1
+	IO: 1.5
+
+	亲缘性：
+
+syslog: 
+	facility.priority
+
+	http://www.magedu.com/admin.php?a=3&b=4
+
+
+listen web
+	bind *:80
+
+
+rhel 6.4 RPM
+
+
+
+
+
+
+
+反向代理：缓存
+
+HTTP/1.1
+	HTTP/1.1 <-- HTTP/1.0
+		cache
+
+web object:
+
+browser: 缓存机制
+	本地：
+
+
+Expire: 2013-05-21 15:55:31
+Cache-Control: max-age=600
+
+index.html: 14:55:59
+
+14:55:59, 0000011: 
+
+
+
+Etag: a9873db 
+If-None-Match
+
+
+条件判断：
+
+
+vcl_recv
+	vcl_pass
+	vcl_hash
+		vcl_hit
+			vcl_deliver
+		vcl_miss
+			vcl_pass
+			vcl_fetch
+				vcl_deliver
+
+
+
+
+vcl_recv
+vcl_hash
+
+vcl_fetch
+vcl_deliver
+
+vcl_hit
+vcl_miss
+
+vcl_pass
+
+
+
+泛域名解析
+
+www.magedu.com/admin.php
+
+magedu.com/admin.php
+
+wwww.magedu.com/admin.php
+
+*.magedu.com/
+
+
+vcl_recv:
+	req.backend 
+	server.ip
+	client.ip
+	req.request ：请求方法
+	req.url
+	req.proto
+	req.http.<header>:
+	req.restarts：保存了重启的次数；
+
+向后端主机发请求时：
+	beresp.request: 
+	beresp.url
+	beresp.proto
+	beresp.http.header
+	beresp.ttl: 缓存时长
+
+从后端主机取回内容后：
+	obj.status: 
+	obj.cacheable: 表示返回内容是否可以缓存，200，203，301，302，404，410
+	obj.valid: 是否为有效的http应答；
+	obj.response" 
+	obj.ttl: 可缓存时长
+
+对客户端应答：
+	resp.status: 返回给客户端的状态码
+	resp.proto
+	resp.http.<header>: 返回给客户响应报文的首部
+	resp.response: 返回的状态信息
+
+varnish, harproxy, httpd, nginx, mysql, php, tomcat, keepalived, corosync/heartbeat, shell
+
+haproxy+keepalivedy
+varnish: 
+
+4w1h: 
+
+Cache: HTTP/1.1
+	Expire
+	Cache-Control:
+		public, private, no-cache, no-store, max-age, s-maxage
+	Etag
+	Last-Modified
+	If-Modified-Since
+	Vary
+	If-None-Match
+
+Expire: 
+Cache-Control: max-age=
+
+cache_hit rate: 、30/100
+
+cache missing reate: 缓存未命中率
+
+Expire: 10
+
+Cache-Control: max-age=600s
+
+10s: 
+
+600:
+	Last-Modified: 
+	304, Not Modified
+
+	200, 
+
+Vary: 
+
+auth, private, cookie
+
+a.jpg: 
+	1: a.jpg 
+	2: 
+
+	if (req.request ~ "\.(jpeg)$") {
+		unset 
+	}
+
+varnish: 
+	vcl_recv
+	  vcl_hash
+	  	vcl_hit
+	  		vcl_deliver
+	  	vcl_miss
+	  		vcl_fetch
+	  vcl_pass
+	  vcl_pipe
+	  vcl_error
+
+
+tomcat:
+	PHP: 
+		开发语言：脚本语言
+		运行环境：解释执行
+			Zend Engine: Opcode
+				Xcache, APC, eAccelerator
+			MVC: 
+				data: 数据
+				bussiness：业务
+				presentation：展示
+		smarty
+			web: 
+
+C/C++: CPU, OS
+	移植困难
+	维护成本高
+
+	高速
+
+	驱动
+
+C/C++
+	C:面向过程
+	C++：面向对象
+
+	C：API (Application Programming Interface)
+		OS, System Call:
+			API: 
+
+		Windows, API
+		Linux, API
+			POSIX: Portable Operating System 
+
+				Linux, API, 
+					(compiling：Linux, running: Windows)
+
+				.dll
+				.so
+
+		ABI: Application Binary Interface
+
+	oak: 橡树，智能
+
+		java: 
+			包含四个独立却又彼此相关的技术：
+				Java程序设计语言
+				Java API
+				Java Class文件格式
+				JVM: Java Virtual Machine
+
+Once for all
+一次编译，到处运行: Write once, Run anywhere
+
+bytecode: 字节码
+
+.java --> .class (bytecode)
+
+JVM的实现方式：
+	1、一次性解释器，解释字节码并执行；
+	2、即时编译器(just-in-time complier)
+		依赖于更多内存缓存解释后的结果
+	3、自适应编译器
+		缓存20%左右代码，提高80%左右的速度；
+
+Java设计语言：Sun
+Java API: 
+
+JVM: Hotspot JVM
+	JRE: Java 运行时环境
+		运行
+	JDK：Java 开发环境
+		开发(编译)+运行
+JVM: OpenJDK
+	开发+运行
+
+
+
+
+JAVA API类库
+第三方类库
+
+
+JDK=Java+API+JVM，是用于实现Java程序开发的最小环境。
+JRE=JVM+java SE API
+
+JAVA应用领域的不同，JAVA可分为三类：
+	JAVA SE：Standard Edtion, J2SE
+	JAVA EE: Enterprise Edition, J2EE
+	JAVA ME: Mobile Edtion, J2ME
+
+1995年，JAVA 1.0面世， James Gosling, Green Project
+
+
+	applet: 小程序
+		动态网站：
+
+	CGI: Common Gateway Interface
+		CGI: 协议
+			HTML
+				<html>
+					<ttle></title>
+					<body></body>
+				</html>
+
+	Servlet: CGI
+
+	JSP: Java Server Page
+		<%language="java">
+		SSH: Structs, Spring, Hebernate
+
+	JSP --> Servlet 
+		Jasper
+
+
+
+applet, servlet, jsp
+
+JSP: 
+	.jsp --> .java -->(JVM) .class
+
+JDK: javac, .java --> .class
+
+
+CGI, Servlet, .java 
+
+Web
+	Servlet Container: Servlet容器
+	Web Container: Web容器
+
+
+线程私有内存区：
+	程序计数器
+	java虚拟机栈
+
+线程共享内存区：
+	方法区
+	堆：java自动内存回收，GC(Garbage Collector)
+
+
+
+垃圾回收算法：
+	1、标记-清除
+	2、复制
+		二分之一
+	3、标记-整理
+
+垃圾回收器：
+	Serial
+	ParNew
+	Parallel Scavenge
+	Serial Old
+	Parallel Old
+
+	CMS: Concurrent Mark Sweep
+		特点：并发收集、低停顿
+		缺点：无法浮动垃圾、由于基于标记-清除会产生碎片
+
+	G1
+
+
+
+JVM: 100, 
+4: 4线程
+
+
+SUN:
+	JRE
+	JDK
+Open:
+	OpenJDK
+
+
+JDK 1.6
+	update 32
+JDK 1.7
+	update 9
+
+jdk-1.6.32
+
+
+安装：
+rpm
+通用二进制格式， .bin
+源码
+
+
+JVM: java 
+
+java配置参数：
+	-XX:+<option>: 开启此参数指定的功能；
+	-XX:-<option>：关闭功能
+	-XX:<option>=<value>：给option指定的选项赋值；
+
+java -XX:+PrintFlagsFinal
+
+
+-D<name>=<value>: set a system property
+
+
+
+Sun JDK监控和故障处理工具：
+	jps, JVM Process Status Tool: 显示指定系统内所有的HotSpot虚拟机进程的列表信息
+	jstat, JVM Statistics Monitoring Tool：收集并显示HotSpot虚拟机各方面的运行数据
+	jinfo：显示正在运行的某HotSpot虚拟机配置信息
+	jmap: 生成某HotSpot虚拟机的内存转储快照；
+
+可视化工具：
+	jconsole: Java的监控与管理控制台
+	jvisualvm: 
+
+
+
+Servlet: CGI, java
+	硬编码, html
+
+JSP: <% %>, html
+	Jasper, .jsp --> .java
+
+	JSP --> Servlet
+
+
+
+/web/htdocs/discuz
+DocumentRoot
+
+alias /phpwind, 
+	/web/bbs/phpwind
+
+http://www.magedu.com/phpwind
+
+
+
+
+/web/bbs/phpwind
+
+容器类组件：
+	Engine, Host, Context
+
+顶级组件：
+	Server, Service
+
+
+Realm(领域): 用户帐号数据库
+Valve(阀门): 
+	记录访问日志
+	基于IP认证
+Logger: 日志记录器
+	
+
+
+
+
+
+
+
+常见的web容器有：
+
+商业版：
+◇ Sun GlassFish Enterprise Server 
+◇ Sun Java System Web Server
+◇ JBoss Enterprise Application Platform
+◇ WebLogic Application Server
+◇ Caucho's Resin Server
+◇ WebSphere Application Server
+◇ NetWeaver
+
+非商业版：
+◇ Apache Tomcat 
+◇ Apache Geronimo
+◇ GlassFish 
+◇ JBoss Application Server 
+◇ Jetty
+◇ Tiny Java Web Server 
+◇ Eclipse Virgo
+
+
+
+server.xml:
+
+Tomcat各组件间的关系：
+
+<Server>
+	<Service>
+		<Connector />
+		<Engine>
+			<Host>
+				<Context> </Context>
+			</Host>
+		</Engine>
+	</Service>
+</Server>
+
+
+
+默认的， 应用程序部署描述符
+
+部署：将一个web应用程序所依赖到的类装载进JVM
+	
+
+
+
+
+<%@ page language="java" %>
+<%@ page import="java.util.*" %>
+<html>
+  <head>
+    <title>JSP test page.</title>
+  </head>
+  <body>
+    <% out.println("Welcome to MageEdu. Site, http://www.magedu.com"); %>
+  </body>
+</html>
+
+
+
+
+
+
+
+<%@ page language="java" %>
+<html>
+  <head><title>TomcatA</title></head>
+  <body>
+    <h1><font color="red">TomcatA </font></h1>
+    <table align="centre" border="1">
+      <tr>
+        <td>Session ID</td>
+    <% session.setAttribute("abc","abc"); %>
+        <td><%= session.getId() %></td>
+      </tr>
+      <tr>
+        <td>Created on</td>
+        <td><%= session.getCreationTime() %></td>
+     </tr>
+    </table>
+  </body>
+</html>
+
+
+manager: 管理应用程序的部署及监控
+host-manager：虚拟主机的管理
+
+	GUI: 
+
+	user属于角色，有内置的角色
+		manager-gui
+		manager-status
+
+
+.jsp, .do: 192.168.10.8
+.jpg, 192.168.10.9
+
+
+http://172.16.100.106/
+
+index index.jsp index.html;
+
+location ~* "\.(jsp|do)$" {
+	proxy_pass http://192.168.10.8;
+}
+
+location ~* "\.(jpg|jpeg)$" {
+	proxy_pass http://192.168.10.9;
+}
+
+
+
+
+A Tomcat init script for Linux
+#!/bin/sh
+# Tomcat init script for Linux.
+#
+# chkconfig: 2345 96 14
+# description: The Apache Tomcat servlet/JSP container.
+CATALINA_HOME=/opt/apache-tomcat-7.0.29
+export  CATALINA_HOME
+# export CATALINA_OPTS="-Xms128m -Xmx256m"
+exec $CATALINA_HOME/bin/catalina.sh $*
+
+
+war:
+	discuz.war
+
+自动部署：
+
+
+
+
+
+启用manager功能：
+编辑tomcat-user.xml，添加如下行：
+<role rolename="manager-gui"/>
+<role rolename="manager-script"/>
+<role rolename="standard"/>
+<user username="tomcat" password="secret" roles="admin-gui,manager-script,standard"/>
+
+而后重启tomcat。
+
+启用host-manager和server status功能：
+<role rolename="admin-gui"/>
+<user username="tomcat" password="s3cret" roles="admin-gui"/>
+
+配置tomcat启用Manager
+<role rolename="manager-gui"/>
+<user username="tomcat" password="guessme" roles="manager-gui"/>
+
+Manager的四个管理角色：
+manager-gui - allows access to the HTML GUI and the status pages
+manager-script - allows access to the text interface and the status pages
+manager-jmx - allows access to the JMX proxy and the status pages
+manager-status - allows access to the status pages only
+
+
+
+
+
+
+添加一个新的Host:
+编辑server.xml:
+     <Host name="www.magedu.com" appBase="webapps" unpackWARs="true" autoDeploy="true" 
+       xmlValidation="false" xmlNamespaceAware="false">
+          <Context docBase="my-webapp" path="" />
+     </Host>
+
+
+
+
+
+
+
+列出所有Deployed的Web应用程序：
+http://{ hostname }:{ portnumber }/manager/list
+
+
+
+
+
+
+
+
+应用程序目录的结构：
+/WEB-INF/web.xml：包含当前webapp的deploy描述符，如所有的servlets和JSP等动态文件的详细信息，会话超时时间和数据源等；因此，其也通常用于定义当前webapp特有的资源；
+/WEB-INF/classes: 包含所有服务器端类及当前应用程序相关的其它第三方类等；
+/WEB-INF/lib: 包含JSP所用到的JAR文件；
+
+用于tomcat的webapp即可以多个独立的文件组成，也可以是jar打包后的单个文件；这些打包后的文件的扩展名可用于判断其内容的类型，如：
+  EJB通常打包为.jar
+  webapp通常打包为.war
+  资源适配器(Resource adapters)通常打包为.rar
+  企业级应用程序通常打包为.ear，它通常是整合的EJB、webapp及资源适配器文件；
+  Web服务通常会打包为.ear或.war；
+  
+
+于是，到底应该使用展开格式的文件还是打包为单个文件的格式，就需要根据需要进行了。一般说来，如果满足以下场景，就应该使用展开后的格式，而非打包格式：
+1、需要在将来的某个时候更新应用程序中的部分内容；使用展开的格式可以避免重新deploy应用程序；
+2、期望使用Tomcat Manager来动态编辑及选择deployment descriptor值；
+3、应用程序中包含静态文件，而这些静态文件需要定期更新；
+
+
+Deploy应用程序所涉及到的操作：
+Deploy: 向tomcat实例提供某应用程序源文件，并让服务器将类加载进类加器中；这样，应用程序才可以为用户所使用；
+Redeploy:用于更新deployment后的某应用程序或应用程序的部分内容；当redeploy整个应用程序时，当前应用程序的所有模块都必须要redeploy成功，否则整个webapp将会停止 ；
+Stop: 卸载当前应用程序的所有类，并停止向用户提供服务；不过，其仍然会保留所有已deploy的文件及名称，并可用于后续的redeployment或starting；
+Start: 重新装载当前应用的类至类加载器，并开启服务；
+Undeploy: 停止某已经deploy的应用程序，并移除deploy产生的文件和名称；
+
+
+
+Tomcat7 deploy应用程序的方法：
+War格式的应用程序：将应用程序war文件放置于CATALINA_BASE目录中并重新启动tomcat；
+没打包的应用程序：将应用程序的非归档文件旋转于CATALINA_BASE目录中；
+Tomcat Manager：登录TM而后进行deploy；
+
+
+
+
+Connector组件：
+进入Tomcat的请求可以根据Tomcat的工作模式分为如下两类：
+Tomcat作为应用程序服务器：请求来自于前端的web服务器，这可能是Apache, IIS, Nginx等；
+Tomcat作为独立服务器：请求来自于web浏览器；
+
+Tomcat应该考虑工作情形并为相应情形下的请求分别定义好需要的连接器才能正确接收来自于客户端的请求。一个引擎可以有一个或多个连接器，以适应多种请求方式。
+
+定义连接器可以使用多种属性，有些属性也只适用于某特定的连接器类型。一般说来，常见于server.xml中的连接器类型通常有4种：
+1) HTTP连接器
+2) SSL连接器
+3) AJP 1.3连接器
+4) proxy连接器
+
+如上面示例server.xml中定义的HTTP连接器：
+<Connector port="8080" protocol="HTTP/1.1"
+      maxThreads="150" connectionTimeout="20000"
+      redirectPort="8443"/>
+      
+定义连接器时可以配置的属性非常多，但通常定义HTTP连接器时必须定义的属性只有“port”，定义AJP连接器时必须定义的属性只有"protocol"，因为默认的协议为HTTP。以下为常用属性的说明：
+1) address：指定连接器监听的地址，默认为所有地址，即0.0.0.0；
+2) maxThreads：支持的最大并发连接数，默认为200；
+3) port：监听的端口，默认为0；
+4) protocol：连接器使用的协议，默认为HTTP/1.1，定义AJP协议时通常为AJP/1.3；
+5) redirectPort：如果某连接器支持的协议是HTTP，当接收客户端发来的HTTPS请求时，则转发至此属性定义的端口；
+6) connectionTimeout：等待客户端发送请求的超时时间，单位为毫秒，默认为60000，即1分钟；
+7) enableLookups：是否通过request.getRemoteHost()进行DNS查询以获取客户端的主机名；默认为true；
+8) acceptCount：设置等待队列的最大长度；通常在tomcat所有处理线程均处于繁忙状态时，新发来的请求将被放置于等待队列中；
+
+下面是一个定义了多个属性的SSL连接器：
+<Connector port="8443"
+    maxThreads="150" minSpareThreads="25" maxSpareThreads="75"
+    enableLookups="false" acceptCount="100" debug="0" scheme="https" secure="true"
+    clientAuth="false" sslProtocol="TLS" />
+
+
+
+连接器：
+	AJP
+	HTTP (web服务器)
+	https
+	proxy
+
+	java类来实现
+
+APR: Apache Portable Runtime
+	AJP：
+		类
+		类
+
+
+1+1
+
+
+TI1: 
+	http:80, ajp:8009
+
+TI2:
+	http:80
+
+多实例
+
+MySQL: 同一个物理服务器
+	运行多个MySQL, 3306
+	3307
+
+CATALINA_HOME
+CATALINA_BASE
+
+
+
+NetworkManager
+network
+
+
+http://192.168.10.8:8080/forum
+
+proxy_pass /forum http://192.168.10.8:8080/forum
+
+
+
+mod_proxy均衡时无法stickeysession
+
+
+
+
+
+

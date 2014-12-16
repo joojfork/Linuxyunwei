@@ -1,0 +1,104 @@
+
+1、手机静音；
+2、迟到；
+	80：10-12：00
+	14：30-18：20
+3、作业：
+4、
+5、
+
+马永亮
+
+
+基础(RHCE)
+
+RH033
+RH133
+RH253
+
+RHCA:
+	RH401
+	RH423 (LDAP)
+	RH442
+	RH436
+	RHS333
+
+MySQL
+
+RH436:
+
+NoSQL
+
+运维工程师：2W，
+	Web：2000
+系统工程师
+系统架构师
+DBA
+
+方法论：
+
+
+计算机体系结构：
+
+运算器
+控制器
+存储器，内存，编址
+输出设备
+输入设备
+
+
+
+POST：BIOS
+
+自举
+
+程序：指令+数据
+
+
+
+RAM：
+ROM：
+
+
+
+
+硬件架构：
+
+ARM
+x86
+x64
+安腾
+alpha
+UltraSparc
+Power
+M68000, M68K
+PowerPC
+
+OS:
+Windows
+Linux
+Unix
+	HP-UX
+	Solaris
+	AIX
+	SCO UNIX
+	Unixware
+OS/2
+
+
+工商银行：622202 1702 0263 78570
+建行：6227 0024 3019 0294 736
+
+
+
+
+
+
+
+
+
+
+
+
+
+

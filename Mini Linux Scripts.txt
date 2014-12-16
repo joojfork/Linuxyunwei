@@ -1,0 +1,43 @@
+
+#/bin/sh
+#
+echo "mounting proc and sys..."
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+
+echo "Load ext3 module..."
+insmod /lib/modules/jbd.ko
+insmod /lib/modules/ext3.ko
+
+echo "Detect and export hardware infomation..."
+mdev -s
+
+echo "Mount real rootfs to /mnt/sysroot..."
+mount -t ext3 /dev/hda2 /mnt/sysroot
+
+echo "Switch to read rootfs ..."
+exec switch_root /mnt/sysroot /sbin/init 
+
+
+
+#!/bin/sh
+#
+echo -e "\tWelcome to \033[34mMageEdu Tiny\033[0m Linux"
+
+echo "mount proc and sys..."
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+
+echo "Remount the rootfs..."
+mount -t ext3 -o remount,rw /dev/hda2 /
+
+echo "Detect and export hardward infomation...."
+mdev -s
+
+echo "Mount the other filesystem..."
+mount -a
+
+
+
+
+

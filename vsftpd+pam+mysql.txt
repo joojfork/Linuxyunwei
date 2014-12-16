@@ -1,0 +1,117 @@
+﻿
+一、安装所需要程序
+
+1、事先安装好开发环境和mysql数据库;
+
+# yum -y install mysql-server mysql-devel
+# yum -y groupinstall "Development Tools" "Development Libraries"
+
+2.安装pam_mysql-0.7RC1
+
+# tar zxvf  pam_mysql-0.7RC1.tar.gz
+# cd  pam_mysql-0.7RC1
+# ./configure --with-mysql=/usr --with-openssl
+# make
+# make install
+
+3.安装vsftpd
+
+# yum -y install vsftpd
+
+
+二、创建虚拟用户账号
+
+1.准备数据库及相关表
+
+首先请确保mysql服务已经正常启动。而后，按需要建立存储虚拟用户的数据库即可，这里将其创建为vsftpd数据库。
+
+mysql> create database vsftpd;
+
+mysql> grant select on vsftpd.* to vsftpd@localhost identified by 'www.magedu.com';
+mysql> grant select on vsftpd.* to vsftpd@127.0.0.1 identified by 'www.magedu.com';
+mysql> flush privileges;
+
+mysql> use vsftpd;
+mysql> create table users (
+    -> id int AUTO_INCREMENT NOT NULL,
+    -> name char(20) binary NOT NULL,
+    -> password char(48) binary NOT NULL,
+    -> primary key(id)
+    -> );
+
+2、添加测试的虚拟用户
+
+根据需要添加所需要的用户，需要说明的是，这里将其密码采用明文格式存储，原因是pam_mysql的password()函数与MySQL的password()函数可能会有所不同。
+
+mysql> insert into users(name,password) values('tom','magedu');
+mysql> insert into users(name,password) values('jerry','magedu');
+
+
+三、配置vsftpd
+
+1.建立pam认证所需文件
+
+#vi /etc/pam.d/vsftpd.mysql
+添加如下两行
+auth required /lib/security/pam_mysql.so user=vsftpd passwd=www.magedu.com host=localhost db=vsftpd table=users usercolumn=name passwdcolumn=password crypt=0
+account required /lib/security/pam_mysql.so user=vsftpd passwd=www.magedu.com host=localhost db=vsftpd table=users usercolumn=name passwdcolumn=password crypt=0
+
+2.修改vsftpd的配置文件，使其适应mysql认证
+
+建立虚拟用户映射的系统用户及对应的目录
+#useradd -s /sbin/nologin -d /var/ftproot vuser
+#chmod go+rx /var/ftproot
+
+请确保/etc/vsftpd.conf中已经启用了以下选项
+anonymous_enable=YES
+local_enable=YES
+write_enable=YES
+anon_upload_enable=NO
+anon_mkdir_write_enable=NO
+chroot_local_user=YES
+
+而后添加以下选项
+guest_enable=YES
+guest_username=vuser
+
+并确保pam_service_name选项的值如下所示
+pam_service_name=vsftpd.mysql
+
+
+四、启动vsftpd服务
+
+# service vsftpd start
+# chkconfig vsftpd on
+
+查看端口开启情况
+
+# netstat -tnlp |grep :21
+tcp        0      0 0.0.0.0:21              0.0.0.0:*               LISTEN      23286/vsftpd 
+
+使用虚拟用户登录,验正配置结果，以下为本机的命令方式测试，你也可以在其它Win Box上用IE或者FTP客户端工具登录验正
+# ftp localhost
+
+
+
+五、配置虚拟用户具有不同的访问权限
+
+vsftpd可以在配置文件目录中为每个用户提供单独的配置文件以定义其ftp服务访问权限，每个虚拟用户的配置文件名同虚拟用户的用户名。配置文件目录可以是任意未使用目录，只需要在vsftpd.conf指定其路径及名称即可。
+
+1、配置vsftpd为虚拟用户使用配置文件目录
+
+# vim vsftpd.conf
+添加如下选项
+user_config_dir=/etc/vsftpd/vusers_dir 
+
+2、创建所需要目录，并为虚拟用户提供配置文件
+
+# mkdir /etc/vsftpd/vusers_dir/
+# cd /etc/vsftpd/vusers_dir/
+# touch tom jerry
+
+3、配置虚拟用户的访问权限
+
+虚拟用户对vsftpd服务的访问权限是通过匿名用户的相关指令进行的。比如，如果需要让tom用户具有上传文件的权限，可以修改/etc/vsftpd/vusers/tom文件，在里面添加如下选项即可。
+anon_upload_enable=YES
+
+

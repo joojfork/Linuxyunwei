@@ -1,0 +1,361 @@
+本文系统作者原创，任何转载必须经过作者同意，否则将保留追究一切责任的权利。 
+
+前提：
+1）本配置共有两个测试节点，分别node1.a.org和node2.a.org，相的IP地址分别为192.168.0.5和192.168.0.6；
+2）node1和node2两个节点已经配置好了基于openais/corosync的集群；且node1和node2也已经配置好了Primary/Secondary模型的drbd设备/dev/drbd0，且对应的资源名称为web；如果您此处的配置有所不同，请确保后面的命令中使用到时与您的配置修改此些信息与您所需要的配置保持一致；
+3）系统为rhel5.4，x86平台；
+
+1、查看当前集群的配置信息，确保已经配置全局属性参数为两节点集群所适用：
+
+# crm configure show
+node node1.a.org
+node node2.a.org
+property $id="cib-bootstrap-options" \
+ dc-version="1.0.11-1554a83db0d3c3e546cfd3aaff6af1184f79ee87" \
+ cluster-infrastructure="openais" \
+ expected-quorum-votes="2" \
+ stonith-enabled="false" \
+ last-lrm-refresh="1308059765" \
+ no-quorum-policy="ignore"
+
+在如上输出的信息中，请确保有stonith-enabled和no-quorum-policy出现且其值与如上输出信息中相同。否则，可以分别使用如下命令进行配置：
+# crm configure property stonith-enabled=false
+# crm configure property no-quorum-policy=ignore
+
+2、将已经配置好的drbd设备/dev/drbd0定义为集群服务；
+
+1）按照集群服务的要求，首先确保两个节点上的drbd服务已经停止，且不会随系统启动而自动启动：
+
+# drbd-overview
+ 0:web Unconfigured . . . . 
+
+# chkconfig drbd off 
+
+2）配置drbd为集群资源：
+
+提供drbd的RA目前由OCF归类为linbit，其路径为/usr/lib/ocf/resource.d/linbit/drbd。我们可以使用如下命令来查看此RA及RA的meta信息：
+
+# crm ra classes
+heartbeat
+lsb
+ocf / heartbeat linbit pacemaker
+stonith
+
+# crm ra list ocf linbit
+drbd 
+
+# crm ra info ocf:linbit:drbd
+This resource agent manages a DRBD resource
+as a master/slave resource. DRBD is a shared-nothing replicated storage
+device. (ocf:linbit:drbd)
+
+Master/Slave OCF Resource Agent for DRBD
+
+Parameters (* denotes required, [] the default):
+
+drbd_resource* (string): drbd resource name
+ The name of the drbd resource from the drbd.conf file.
+
+drbdconf (string, [/etc/drbd.conf]): Path to drbd.conf
+ Full path to the drbd.conf file.
+
+Operations' defaults (advisory minimum):
+
+ start timeout=240
+ promote timeout=90
+ demote timeout=90
+ notify timeout=90
+ stop timeout=100
+ monitor_Slave interval=20 timeout=20 start-delay=1m
+ monitor_Master interval=10 timeout=20 start-delay=1m
+
+
+drbd需要同时运行在两个节点上，但只能有一个节点（primary/secondary模型）是Master，而另一个节点为Slave；因此，它是一种比较特殊的集群资源，其资源类型为多态（Multi-state）clone类型，即主机节点有Master和Slave之分，且要求服务刚启动时两个节点都处于slave状态。
+
+[root@node1 ~]# crm
+crm(live)# configure
+crm(live)configure# primitive webdrbd ocf:linbit:drbd params drbd_resource=web op monitor role=Master interval=50s timeout=30s op monitor role=Slave interval=60s timeout=30s
+crm(live)configure# master MS_Webdrbd webdrbd meta master-max="1" master-node-max="1" clone-max="2" clone-node-max="1" notify="true"
+
+crm(live)configure# show webdrbd
+primitive webdrbd ocf:linbit:drbd \
+ params drbd_resource="web" \
+ op monitor interval="15s"
+crm(live)configure# show MS_Webdrbd
+ms MS_Webdrbd webdrbd \
+ meta master-max="1" master-node-max="1" clone-max="2" clone-node-max="1" notify="true"
+crm(live)configure# verify
+crm(live)configure# commit
+
+
+查看当前集群运行状态：
+# crm status
+============
+Last updated: Fri Jun 17 06:24:03 2011
+Stack: openais
+Current DC: node2.a.org - partition with quorum
+Version: 1.0.11-1554a83db0d3c3e546cfd3aaff6af1184f79ee87
+2 Nodes configured, 2 expected votes
+1 Resources configured.
+============
+
+Online: [ node2.a.org node1.a.org ]
+
+ Master/Slave Set: MS_Webdrbd
+ Masters: [ node2.a.org ]
+ Slaves: [ node1.a.org ]
+
+由上面的信息可以看出此时的drbd服务的Primary节点为node2.a.org，Secondary节点为node1.a.org。当然，也可以在node2上使用如下命令验正当前主机是否已经成为web资源的Primary节点：
+# drbdadm role web
+Primary/Secondary
+
+3）为Primary节点上的web资源创建自动挂载的集群服务
+
+MS_Webdrbd的Master节点即为drbd服务web资源的Primary节点，此节点的设备/dev/drbd0可以挂载使用，且在某集群服务的应用当中也需要能够实现自动挂载。假设我们这里的web资源是为Web服务器集群提供网页文件的共享文件系统，其需要挂载至/www（此目录需要在两个节点都已经建立完成）目录。
+
+此外，此自动挂载的集群资源需要运行于drbd服务的Master节点上，并且只能在drbd服务将某节点设置为Primary以后方可启动。因此，还需要为这两个资源建立排列约束和顺序约束。
+
+# crm
+crm(live)# configure
+crm(live)configure# primitive WebFS ocf:heartbeat:Filesystem params device="/dev/drbd0" directory="/www" fstype="ext3"
+crm(live)configure# colocation WebFS_on_MS_webdrbd inf: WebFS MS_Webdrbd:Master
+crm(live)configure# order WebFS_after_MS_Webdrbd inf: MS_Webdrbd:promote WebFS:start
+crm(live)configure# verify
+crm(live)configure# commit
+
+查看集群中资源的运行状态：
+ crm status
+============
+Last updated: Fri Jun 17 06:26:03 2011
+Stack: openais
+Current DC: node2.a.org - partition with quorum
+Version: 1.0.11-1554a83db0d3c3e546cfd3aaff6af1184f79ee87
+2 Nodes configured, 2 expected votes
+2 Resources configured.
+============
+
+Online: [ node2.a.org node1.a.org ]
+
+ Master/Slave Set: MS_Webdrbd
+ Masters: [ node2.a.org ]
+ Slaves: [ node1.a.org ]
+ WebFS (ocf::heartbeat:Filesystem): Started node2.a.org
+
+由上面的信息可以发现，此时WebFS运行的节点和drbd服务的Primary节点均为node2.a.org；我们在node2上复制一些文件至/www目录（挂载点），而后在故障故障转移后查看node1的/www目录下是否存在这些文件。
+# cp /etc/rc./rc.sysinit /www
+
+下面我们模拟node2节点故障，看此些资源可否正确转移至node1。
+
+以下命令在Node2上执行：
+# crm node standby
+# crm status
+============
+Last updated: Fri Jun 17 06:27:03 2011
+Stack: openais
+Current DC: node2.a.org - partition with quorum
+Version: 1.0.11-1554a83db0d3c3e546cfd3aaff6af1184f79ee87
+2 Nodes configured, 2 expected votes
+2 Resources configured.
+============
+
+Node node2.a.org: standby
+Online: [ node1.a.org ]
+
+ Master/Slave Set: MS_Webdrbd
+ Masters: [ node1.a.org ]
+ Stopped: [ webdrbd:0 ]
+ WebFS (ocf::heartbeat:Filesystem): Started node1.a.org
+
+由上面的信息可以推断出，node2已经转入standby模式，其drbd服务已经停止，但故障转移已经完成，所有资源已经正常转移至node1。
+
+在node1可以看到在node2作为primary节点时产生的保存至/www目录中的数据，在node1上均存在一份拷贝。
+
+让node2重新上线：
+# crm node online
+[root@node2 ~]# crm status
+============
+Last updated: Fri Jun 17 06:30:05 2011
+Stack: openais
+Current DC: node2.a.org - partition with quorum
+Version: 1.0.11-1554a83db0d3c3e546cfd3aaff6af1184f79ee87
+2 Nodes configured, 2 expected votes
+2 Resources configured.
+============
+
+Online: [ node2.a.org node1.a.org ]
+
+ Master/Slave Set: MS_Webdrbd
+ Masters: [ node1.a.org ]
+ Slaves: [ node2.a.org ]
+ WebFS (ocf::heartbeat:Filesystem): Started node1.a.org
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+mysql+drbd+corosync
+ 
+ 
+node node1.magedu.com
+node node2.magedu.com
+primitive mysqldrbd ocf:linbit:drbd \
+	params drbd_resource="mysqlres" \
+	op monitor interval="30s" role="Master" timeout="30s" \
+	op monitor interval="40s" role="Slave" timeout="30s" \
+	op start interval="0" timeout="240" \
+	op stop interval="0" timeout="100"
+primitive mysqlfs ocf:heartbeat:Filesystem \
+	params device="/dev/drbd0" directory="/data/mydata" fstype="ext3" \
+	op start interval="0" timeout="60s" \
+	op stop interval="0" timeout="60s"
+primitive mysqlserver lsb:mysqld
+primitive mysqlvip ocf:heartbeat:IPaddr \
+	params ip="172.16.100.1"
+ms ms_mysqldrbd mysqldrbd \
+	meta master-max="1" master-node-max="1" clone-max="2" clone-node-max="1" notify="true"
+colocation mysqlfs_with_ms_mysqldrbd inf: mysqlfs ms_mysqldrbd:Master
+colocation mysqlserver_with_mysqlfs inf: mysqlfs mysqlserver
+colocation mysqlvip_with_mysqlserver inf: mysqlvip mysqlserver
+order mysqlfs_after_ms_mysqldrbd inf: ms_mysqldrbd:promote mysqlfs:start
+order mysqlserver_after_mysqlfs inf: mysqlfs mysqlserver
+property $id="cib-bootstrap-options" \
+	dc-version="1.1.5-1.1.el5-01e86afaaa6d4a8c4836f68df80ababd6ca3902f" \
+	cluster-infrastructure="openais" \
+	expected-quorum-votes="2" \
+	stonith-enabled="false" \
+	no-quorum-policy="ignore"
+
+
+版本2：
+crm(live)# configure 
+crm(live)configure# SHOW
+node node1.magedu.com \
+	attributes standby="off"
+node node2.magedu.com \
+	attributes standby="off"
+primitive myip ocf:heartbeat:IPaddr \
+	params ip="172.16.100.1" nic="eth0" cidr_netmask="255.255.0.0"
+primitive mysqld lsb:mysqld
+primitive mysqldrbd ocf:heartbeat:drbd \
+	params drbd_resource="mydrbd" \
+	op start interval="0" timeout="240" \
+	op stop interval="0" timeout="100" \
+	op monitor interval="20" role="Master" timeout="30" \
+	op monitor interval="30" role="Slave" timeout="30"
+primitive mystore ocf:heartbeat:Filesystem \
+	params device="/dev/drbd0" directory="/mydata" fstype="ext3" \
+	op start interval="0" timeout="60" \
+	op stop interval="0" timeout="60"
+ms ms_mysqldrbd mysqldrbd \
+	meta master-max="1" master-node-max="1" clone-max="2" clone-node-max="1" notify="true"
+colocation myip_with_ms_mysqldrbd inf: ms_mysqldrbd:Master myip
+colocation mysqld_with_mystore inf: mysqld mystore
+colocation mystore_with_ms_mysqldrbd inf: mystore ms_mysqldrbd:Master
+order mysqld_after_mystore inf: mystore mysqld
+order mystore_after_ms_mysqldrbd inf: ms_mysqldrbd:promote mystore:start
+property $id="cib-bootstrap-options" \
+	dc-version="1.1.5-1.1.el5-01e86afaaa6d4a8c4836f68df80ababd6ca3902f" \
+	cluster-infrastructure="openais" \
+	expected-quorum-votes="2" \
+	stonith-enabled="false" \
+	no-quorum-policy="ignore" \
+	last-lrm-refresh="1368438416"
+rsc_defaults $id="rsc-options" \
+	resource-stickiness="100"
+
+	
+	
+	
+使用双主模型：
+
+一、设定资源启用双主模型
+resource <resource> {
+  startup {
+    become-primary-on both;
+    ...
+  }
+  net {
+    allow-two-primaries yes;
+    after-sb-0pri discard-zero-changes;
+    after-sb-1pri discard-secondary;
+    after-sb-2pri disconnect;
+    ...
+  }
+  ...
+}
+
+同时，包括双主drbd模型中的任何集群文件系统都需要fencing功能，且要求其不仅要在资源级别实现，也要在节点级别实现STONITH功能。
+
+disk {
+        fencing resource-and-stonith;
+}
+handlers {
+        outdate-peer "/sbin/make-sure-the-other-node-is-confirmed-dead.sh"
+}
+
+
+
+二、使用GFS2文件系统
+
+
+
+
+三、结合RHCS时的资源定义示例
+<rm>
+  <resources />
+  <service autostart="1" name="mysql">
+    <drbd name="drbd-mysql" resource="mydrbd">
+      <fs device="/dev/drbd0"
+          mountpoint="/var/lib/mysql"
+          fstype="ext3"
+          name="mydrbd"
+          options="noatime"/>
+    </drbd>
+    <ip address="172.16.100.8" monitor_link="1"/>
+    <mysql config_file="/etc/my.cnf"
+           listen_address="172.16.100.8"
+           name="mysqld"/>
+  </service>
+</rm>
+
+
+
+
+
+
+多节点同时启动一个IP
+node node1.magedu.com \
+	attributes standby="off"
+node node2.magedu.com
+node node3.magedu.com \
+	attributes standby="off"
+primitive DLM ocf:pacemaker:controld \
+	params daemon="/usr/sbin/dlm_controld" \
+	op start interval="0" timeout="90" \
+	op stop interval="0" timeout="100"
+primitive clusterip ocf:heartbeat:IPaddr2 \
+	params ip="172.16.200.7" cidr_netmask="32" clusterip_hash="sourceip"
+clone WebIP clusterip \
+	meta globally-unique="true" clone-max="3" clone-node-max="3" target-role="Stopped"
+clone dlm_clone DLM \
+	meta clone-max="3" clone-node-max="1" target-role="Started"
+property $id="cib-bootstrap-options" \
+	dc-version="1.1.7-6.el6-148fccfd5985c5590cc601123c6c16e966b85d14" \
+	cluster-infrastructure="openais" \
+	expected-quorum-votes="3" \
+	stonith-enabled="false" \
+	last-lrm-refresh="1354024090"
+
+
+
+
+

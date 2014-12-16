@@ -1,0 +1,164 @@
+# /etc/rc.d/rc.functions
+# (2009) Douglas Jerome <douglas@ttylinux.org>
+
+export PATH=/sbin:/usr/sbin:/bin:/usr/bin
+export LC_ALL=POSIX
+umask 022
+
+RC_SIZE=$(stty -F /dev/console size)
+RC_COLUMNS=${RC_SIZE#* }
+[[ "${RC_COLUMNS}" = "0" ]] && RC_COLUMNS=80
+RC_STATUS_COLUMN=$((${RC_COLUMNS}-11))
+
+MOVE_TO_STATCOL="\\033[${RC_STATUS_COLUMN}G"
+T_RED="\\033[1;31m"    # bold+red
+T_GREEN="\\033[1;32m"  # bold+green
+T_YELLOW="\\033[1;33m" # bold+yellow
+T_BLUE="\\033[1;34m"   # bold+blue
+T_CYAN="\\033[1;36m"   # cyan
+T_BOLD="\\033[1;37m"   # bold+white
+T_NORM="\\033[0;39m"   # normal
+T_PASS=${T_GREEN}
+T_WARN=${T_YELLOW}
+T_FAIL=${T_RED}
+
+success() {
+	local count=$((${RC_STATUS_COLUMN}-${#1}))
+	echo -n "${1} "
+	while [[ ${count} -gt 0 ]];do
+		echo -en "${T_BLUE}.${T_NORM}"
+		count=$((${count}-1))
+	done
+	echo -e $" [  ${T_PASS}OK${T_NORM}  ]"
+}
+
+attn() {
+	local count=$((${RC_STATUS_COLUMN}-${#1}))
+	echo -n "${1} "
+	while [[ ${count} -gt 0 ]];do
+		echo -en $"${T_BLUE}.${T_NORM}"
+		count=$((${count}-1))
+	done
+	echo -e $" [ ${T_WARN}ATTN${T_NORM} ]"
+}
+
+failure() {
+	local count=$((${RC_STATUS_COLUMN}-${#1}))
+	echo -n "${1} "
+	while [[ ${count} -gt 0 ]];do
+		echo -en $"${T_BLUE}.${T_NORM}"
+		count=$((${count}-1))
+	done
+	echo -e $" [${T_FAIL}FAILED${T_NORM}]"
+}
+
+waiting() {
+	local count=$((${RC_STATUS_COLUMN}-${#1}))
+	echo -n $"${1} "
+	while [[ ${count} -gt 0 ]];do
+		echo -en $"${T_BLUE}.${T_NORM}"
+		count=$((${count}-1))
+	done
+	echo -en $" [${T_WARN}WATING${T_NORM}]"
+	echo -en "${MOVE_TO_STATCOL}${T_BLUE}..${T_NORM}"
+}
+
+done_success() {
+	echo -e $" [  ${T_PASS}OK${T_NORM}  ]"
+}
+
+done_failure() {
+	echo -e $" [${T_FAIL}FAILED${T_NORM}]"
+}
+
+action() {
+	local rc=
+	local string=${1}
+	shift
+	$* && success "${string}" || failure "${string}"
+	rc=$?
+	return ${rc}
+}
+
+load_proc() {
+	local name=""
+	local nicelevel=""
+	if [[ $# = 0 ]]; then
+		echo "Usage: load_proc [ +/-nicelevel ] PROGRAM" 1>&2
+		return 1
+	fi
+	name=${1##*/} # basename ${1}
+	case ${1} in
+		[-+][0-9]*)
+			nicelevel="nice -n ${1}"
+			shift
+			;;
+	esac
+	ulimit -S -c 0
+	${nicelevel} $@
+	if [[ $? -eq 0 ]]; then
+		success "startup ${name}"
+	else
+		failure "startup ${name}"
+	fi
+}
+
+kill_proc() {
+	local killlevel=""
+	local name=""
+	local pidlist=""
+	if [[ $# = 0 ]]; then
+		echo "Usage: kill_proc PROGRAM [ signal ]" 1>&2
+		return 1
+	fi
+	name=${1##*/} # basename ${1}
+	pidlist=$(pidof -o $$ -o $PPID -o %PPID ${name})
+	[[ "${2}" != "" ]] && killlevel="-${2}" || killlevel="-9"
+	if [[ -n "${pidlist}" ]]; then
+		kill ${killlevel} ${pidlist}
+		if [[ $? -eq 0 ]]; then
+			success "signal(kill) ${killlevel} ${name}"
+			rm -f /var/run/${name}.pid
+		else
+			failure "signal(kill) ${killlevel} ${name}"
+		fi
+	else
+		attn "signal(kill) ${killlevel} ${name} ** NO PID **"
+	fi
+}
+
+status_proc() {
+	local name=""
+	local pid=""
+	if [[ $# = 0 ]]; then
+		echo "Usage: status_proc {program}"
+		return 1
+	fi
+	name=${1##*/} # basename ${1}
+	pid=$(pidof -o $$ -o $PPID -o %PPID ${name})
+	if [[ -n "${pid}" ]]; then
+		echo "${1} running with process id ${pid}."
+		return 0
+	fi
+	if [[ -f /var/run/${name}.pid ]]; then
+		read pid < /var/run/${name}.pid
+		if [[ -n "${pid}" ]]; then
+			echo "${1} not running but /var/run/${name}.pid exists."
+			return 1
+		fi
+	fi
+	if [[ -f /var/lock/subsys/${name} ]]; then
+		echo $"${name} not running but /var/lock/subsys/${name} exists."
+		return 2
+	fi
+	echo "${1} is not running."
+	return 3
+}
+
+which_prog() {
+	local prog=""
+	for p in $(echo ${PATH} | tr ':' ' '); do
+		[[ -x "${p}/${1}" ]] && prog="${p}/${1}"
+	done
+	echo ${prog}
+}

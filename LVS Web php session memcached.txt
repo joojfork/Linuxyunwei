@@ -1,0 +1,66 @@
+
+前提：
+1、配置各php支持使用memcache；
+2、安装配置好memcached服务器，这里假设其地址为172.16.200.11，端口为11211；
+
+
+一、配置php将会话保存至memcached中
+
+编辑php.ini文件，确保如下两个参数的值分别如下所示：
+session.save_handler = memcache
+session.save_path = "tcp://172.16.200.11:11211?persistent=1&weight=1&timeout=1&retry_interval=15"
+
+二、测试
+
+新建php页面setsess.php，为客户端设置启用session：
+<?php
+session_start();
+if (!isset($_SESSION['www.MageEdu.com'])) {
+  $_SESSION['www.MageEdu.com'] = time();
+}
+print $_SESSION['www.MageEdu.com'];
+print "<br><br>";
+print "Session ID: " . session_id();
+?>
+
+新建php页面showsess.php，获取当前用户的会话ID：
+<?php
+session_start();
+$memcache_obj = new Memcache;
+$memcache_obj->connect('172.16.200.11', 11211);
+$mysess=session_id();
+var_dump($memcache_obj->get($mysess));
+$memcache_obj->close();
+?>
+
+
+
+
+
+
+
+
+<?php 
+// Generating cookies must take place before any HTML. 
+// Check for existing "SessionId" cookie 
+$session = $HTTP_COOKIE_VARS["SessionId"]; 
+if ( $session == "" ) { 
+// Generate time-based unique id. 
+// Use user's IP address to make more unique. 
+$session = uniqid ( getenv ( "REMOTE_ADDR" ) ); 
+// Send session id - expires when browser exits 
+SetCookie ( "SessionId", $session ); 
+} 
+?> 
+<HTML> 
+<HEAD><TITLE>Session Test</TITLE></HEAD> 
+<BODY> <br> 16 Current session id: <?php echo $session ?> 
+</BODY></HTML>
+
+
+
+
+
+
+
+

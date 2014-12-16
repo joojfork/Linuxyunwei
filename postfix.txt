@@ -1,0 +1,819 @@
+一、安装前的准备工作：
+
+1、安装以下开发所用到的rpm包组：
+Development Libraries
+Development Tools
+Legacy Software Development
+X Software Development
+
+方法：
+# yum groupinstall "packge_group_name"
+
+2、安装所需的rpm包，包括以下这些：
+httpd, tcl, tcl-devel, libart_lgpl, libart_lgpl-devel, libtool-ltdl, libtool-ltdl-devel, expect
+
+3、关闭sendmail，并将它的随系统自动启动功能关闭：
+# service sendmail stop
+# chkconfig sendmail off
+
+4、启动saslauthd服务，并将其加入到自动启动队列：
+# service saslauthd start
+# chkconfig saslauthd on
+
+二、安装mysql-5.5.20
+
+1、准备数据存放的文件系统
+
+新建一个逻辑卷，并将其挂载至特定目录即可。这里不再给出过程。
+
+这里假设其逻辑卷的挂载目录为/mydata，而后需要创建/mydata/data目录做为mysql数据的存放目录。
+
+2、新建用户以安全方式运行进程：
+
+# groupadd -r mysql
+# useradd -g mysql -r -s /sbin/nologin -M -d /mydata/data mysql
+# chown -R mysql:mysql /mydata/data
+
+3、安装并初始化mysql-5.5.20
+
+首先下载平台对应的mysql版本至本地，这里是32位平台，因此，选择的为mysql-5.5.19-linux2.6-i686.tar.gz，其下载位置为ftp://172.16.0.1/pub/Sources/mysql-5.5。
+
+# tar xf mysql-5.5.20-linux2.6-i686.tar.gz -C /usr/local
+# cd /usr/local/
+# ln -sv mysql-5.5.20-linux2.6-i686  mysql
+# cd mysql 
+
+# chown -R mysql:mysql  .
+# scripts/mysql_install_db --user=mysql --datadir=/mydata/data
+# chown -R root  .
+
+4、为mysql提供主配置文件：
+
+# cd /usr/local/mysql
+# cp support-files/my-large.cnf  /etc/my.cnf
+
+并修改此文件中thread_concurrency的值为你的CPU个数乘以2，比如这里使用如下行：
+thread_concurrency = 2
+
+另外还需要添加如下行指定mysql数据文件的存放位置：
+datadir = /mydata/data
+
+
+5、为mysql提供sysv服务脚本：
+
+# cd /usr/local/mysql
+# cp support-files/mysql.server  /etc/rc.d/init.d/mysqld
+
+添加至服务列表：
+# chkconfig --add mysqld
+# chkconfig mysqld on
+
+而后就可以启动服务测试使用了。
+
+
+为了使用mysql的安装符合系统使用规范，并将其开发组件导出给系统使用，这里还需要进行如下步骤：
+
+6、输出mysql的man手册至man命令的查找路径：
+
+编辑/etc/man.config，添加如下行即可：
+MANPATH  /usr/local/mysql/man
+
+7、输出mysql的头文件至系统头文件路径/usr/include：
+
+这可以通过简单的创建链接实现：
+# ln -sv /usr/local/mysql/include  /usr/include/mysql
+
+8、输出mysql的库文件给系统库查找路径：
+
+# echo '/usr/local/mysql/lib' > /etc/ld.so.conf.d/mysql.conf
+
+而后让系统重新载入系统库：
+# ldconfig
+
+9、修改PATH环境变量，让系统可以直接使用mysql的相关命令。具体实现过程这里不再给出。
+
+
+三、安装配置postfix
+
+# groupadd -g 2525 postfix
+# useradd -g postfix -u 2525 -s /sbin/nologin -M postfix
+# groupadd -g 2526 postdrop
+# useradd -g postdrop -u 2526 -s /sbin/nologin -M postdrop
+
+# tar zxvf postfix-2.9.1.tar.gz
+# cd postfix-2.9.1
+# make makefiles 'CCARGS=-DHAS_MYSQL -I/usr/local/mysql/include -DUSE_SASL_AUTH -DUSE_CYRUS_SASL -I/usr/include/sasl  -DUSE_TLS' 'AUXLIBS=-L/usr/local/mysql/lib -lmysqlclient -lz -lm -L/usr/lib/sasl2 -lsasl2  -lssl -lcrypto'
+# make
+# make install
+
+按照以下的提示输入相关的路径([]号中的是缺省值，”]”后的是输入值，省略的表示采用默认值)
+
+　　install_root: [/] /
+　　tempdir: [/root/postfix-2.9.1] /tmp/postfix
+　　config_directory: [/etc/postfix] /etc/postfix
+　　daemon_directory: [/usr/libexec/postfix] 
+　　command_directory: [/usr/sbin] 
+　　queue_directory: [/var/spool/postfix]
+　　sendmail_path: [/usr/sbin/sendmail]
+　　newaliases_path: [/usr/bin/newaliases]
+　　mailq_path: [/usr/bin/mailq]
+　　mail_owner: [postfix]
+　　setgid_group: [postdrop]   
+    html_directory: [no]/var/www/html/postfix 
+    manpages: [/usr/local/man]
+    readme_directory: [no]
+
+生成别名二进制文件：
+#  newaliases
+
+2．进行一些基本配置，测试启动postfix并进行发信
+# vim /etc/postfix/main.cf
+修改以下几项为您需要的配置
+myhostname = mail.magedu.com
+myorigin = magedu.com
+mydomain = magedu.com
+mydestination = $myhostname, localhost.$mydomain, localhost, $mydomain
+mynetworks = 192.168.1.0/24, 127.0.0.0/8
+
+说明:
+myorigin参数用来指明发件人所在的域名，即做发件地址伪装；
+mydestination参数指定postfix接收邮件时收件人的域名，即您的postfix系统要接收到哪个域名的邮件；
+myhostname 参数指定运行postfix邮件系统的主机的主机名，默认情况下，其值被设定为本地机器名；
+mydomain 参数指定您的域名，默认情况下，postfix将myhostname的第一部分删除而作为mydomain的值；
+mynetworks 参数指定你所在的网络的网络地址，postfix系统根据其值来区别用户是远程的还是本地的，如果是本地网络用户则允许其访问；
+inet_interfaces 参数指定postfix系统监听的网络接口；
+
+注意：
+1、在postfix的配置文件中，参数行和注释行是不能处在同一行中的；
+2、任何一个参数的值都不需要加引号，否则，引号将会被当作参数值的一部分来使用；
+3、每修改参数及其值后执行 postfix reload 即可令其生效；但若修改了inet_interfaces，则需重新启动postfix；
+4、如果一个参数的值有多个，可以将它们放在不同的行中，只需要在其后的每个行前多置一个空格即可；postfix会把第一个字符为空格或tab的文本行视为上一行的延续；
+
+启动postfix
+/usr/local/postfix/sbin/postfix  start
+
+连接postfix，验正服务启动状况：
+# telnet localhost 25
+Trying 127.0.0.1...
+Connected to localhost.localdomain (127.0.0.1).
+Escape character is '^]'.
+220 mail.magedu.com ESMTP Postfix
+ehlo mail.magedu.com
+250-mail.magedu.com
+250-PIPELINING
+250-SIZE 10240000
+250-VRFY
+250-ETRN
+250-ENHANCEDSTATUSCODES
+250-8BITMIME
+250 DSN
+mail from:root@magedu.com
+250 2.1.0 Ok
+rcpt to:redhat@magedu.com
+250 2.1.5 Ok
+data
+354 End data with <CR><LF>.<CR><LF>
+subject:Mail test!
+Mail test!!!
+.
+250 2.0.0 Ok: queued as AB94A1A561
+quit
+221 2.0.0 Bye
+Connection closed by foreign host.
+
+切换到redhat用户进行收信：
+# su - redhat
+$ mail
+Mail version 8.1 6/6/93.  Type ? for help.
+"/var/spool/mail/redhat": 1 message 1 new
+>N  1 root@magedu.com        Wed Sep  5 10:59  15/488   "Mail test!"
+&
+
+四、为postfix提供SysV服务脚本/etc/rc.d/init.d/postfix，内容如下(#END 之前)：
+#!/bin/bash
+#
+# postfix      Postfix Mail Transfer Agent
+#
+# chkconfig: 2345 80 30
+# description: Postfix is a Mail Transport Agent, which is the program \
+#              that moves mail from one machine to another.
+# processname: master
+# pidfile: /var/spool/postfix/pid/master.pid
+# config: /etc/postfix/main.cf
+# config: /etc/postfix/master.cf
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+# Source networking configuration.
+. /etc/sysconfig/network
+
+# Check that networking is up.
+[ $NETWORKING = "no" ] && exit 3
+
+[ -x /usr/sbin/postfix ] || exit 4
+[ -d /etc/postfix ] || exit 5
+[ -d /var/spool/postfix ] || exit 6
+
+RETVAL=0
+prog="postfix"
+
+start() {
+	# Start daemons.
+	echo -n $"Starting postfix: "
+        /usr/bin/newaliases >/dev/null 2>&1
+	/usr/sbin/postfix start 2>/dev/null 1>&2 && success || failure $"$prog start"
+	RETVAL=$?
+	[ $RETVAL -eq 0 ] && touch /var/lock/subsys/postfix
+        echo
+	return $RETVAL
+}
+
+stop() {
+  # Stop daemons.
+	echo -n $"Shutting down postfix: "
+	/usr/sbin/postfix stop 2>/dev/null 1>&2 && success || failure $"$prog stop"
+	RETVAL=$?
+	[ $RETVAL -eq 0 ] && rm -f /var/lock/subsys/postfix
+	echo
+	return $RETVAL
+}
+
+reload() {
+	echo -n $"Reloading postfix: "
+	/usr/sbin/postfix reload 2>/dev/null 1>&2 && success || failure $"$prog reload"
+	RETVAL=$?
+	echo
+	return $RETVAL
+}
+
+abort() {
+	/usr/sbin/postfix abort 2>/dev/null 1>&2 && success || failure $"$prog abort"
+	return $?
+}
+
+flush() {
+	/usr/sbin/postfix flush 2>/dev/null 1>&2 && success || failure $"$prog flush"
+	return $?
+}
+
+check() {
+	/usr/sbin/postfix check 2>/dev/null 1>&2 && success || failure $"$prog check"
+	return $?
+}
+
+restart() {
+	stop
+	start
+}
+
+# See how we were called.
+case "$1" in
+  start)
+	start
+	;;
+  stop)
+	stop
+	;;
+  restart)
+	stop
+	start
+	;;
+  reload)
+	reload
+	;;
+  abort)
+	abort
+	;;
+  flush)
+	flush
+	;;
+  check)
+	check
+	;;
+  status)
+  	status master
+	;;
+  condrestart)
+	[ -f /var/lock/subsys/postfix ] && restart || :
+	;;
+  *)
+	echo $"Usage: $0 {start|stop|restart|reload|abort|flush|check|status|condrestart}"
+	exit 1
+esac
+
+exit $?
+
+# END
+
+为此脚本赋予执行权限：
+# chmod +x /etc/rc.d/init.d/postfix
+
+将postfix服务添加至服务列表：
+# chkconfig --add postfix
+
+设置其开机自动启动：
+# chkconfig postfix on
+
+使用此脚本重新启动服务，以测试其能否正常执行：
+# service postfix restart
+
+
+五、为postfix服务开启用户别名支持：
+
+1、在配置文件开启基于hash的别名文件支持
+
+在main.cf中，找到如下指令，而后启用它(即移除前面的#号)：
+#alias_maps = hash:/etc/aliases
+
+2、在/etc/aliases文件中定义新的别名项，其格式通常为以冒号隔开的两个字段，前一个字段为初始目标邮件地址，后一个字段为实际发往的地址，如：
+redhat：	magedu
+gentoo@126.com:  admin@magedu.com
+
+3、将/etc/aliases转换为hash格式：
+# postalias  /etc/aliases
+
+4、让postfix重新载入配置文件，即可进行测试；
+
+六、实现postfix基于客户端的访问控制
+
+1、基于客户端的访问控制概览
+
+postfix内置了多种反垃圾邮件的机制，其中就包括“客户端”发送邮件限制。客户端判别机制可以设定一系列客户信息的判别条件：
+smtpd_client_restrictions
+smtpd_data_restrictions
+smtpd_helo_restrictions
+smtpd_recipient_restrictions
+smtpd_sender_restrictions
+
+上面的每一项参数分别用于检查SMTP会话过程中的特定阶段，即客户端提供相应信息的阶段，如当客户端发起连接请求时，postfix就可以根据配置文件中定义的smtpd_client_restrictions参数来判别此客户端IP的访问权限。相应地，smtpd_helo_restrictions则用于根据用户的helo信息判别客户端的访问能力等等。
+
+如果DATA命令之前的所有内容都被接受，客户端接着就可以开始传送邮件内容了。邮件内容通常由两部分组成，前半部分是标题(header)，其可以由header_check过滤，后半部分是邮件正文(body)，其可以由check_body过滤。这两项实现的是邮件“内容检查”。
+
+postfix的默认配置如下：
+smtpd_client_restrictions =
+smtpd_data_restrictions =
+smtpd_end_of_data_restrictions =
+smtpd_etrn_restrictions =
+smtpd_helo_restrictions =
+smtpd_recipient_restrictions = permit_mynetworks, reject_unauth_destination
+smtpd_sender_restrictions =
+
+这限制了只有mynetworks参数中定义的本地网络中的客户端才能通过postfix转发邮件，其它客户端则不被允许，从而关闭了开放式中继(open relay)的功能。
+
+Postfix有多个内置的限制条件，如上面的permit_mynetworks和reject_unauth_destination，但管理员也可以使用访问表(access map)来自定义限制条件。自定义访问表的条件通常使用check_client_access, check_helo_access, check_sender_access, check_recipient_access进行，它们后面通常跟上type:mapname格式的访问表类型和名称。其中，check_sender_access和check_recipient_access用来检查客户端提供的邮件地址，因此，其访问表中可以使用完整的邮件地址，如admin@magedu.com；也可以只使用域名，如magedu.com；还可以只有用户名的部分，如marion@。
+
+2、实现示例1
+
+这里以禁止172.16.100.200这台主机通过工作在172.16.100.1上的postfix服务发送邮件为例演示说明其实现过程。访问表使用hash的格式。
+
+(1)首先，编辑/etc/postfix/access文件，以之做为客户端检查的控制文件，在里面定义如下一行：
+172.16.100.200		REJECT
+
+(2)将此文件转换为hash格式
+# postmap /etc/postfix/access
+
+(3)配置postfix使用此文件对客户端进行检查
+编辑/etc/postfix/main.cf文件，添加如下参数：
+smtpd_client_restrictions = check_client_access hash:/etc/postfix/access
+
+(4)让postfix重新载入配置文件即可进行发信控制的效果测试了。
+
+3、实现示例2
+
+这里以禁止通过本服务器向microsoft.com域发送邮件为例演示其实现过程。访问表使用hash的格式。
+(1)首先，建立/etc/postfix/denydstdomains文件(文件名任取)，在里面定义如下一行：
+microsoft.com		REJECT
+
+(2)将此文件转换为hash格式
+# postmap /etc/postfix/denydstdomains
+
+(3)配置postfix使用此文件对客户端进行检查
+编辑/etc/postfix/main.cf文件，添加如下参数：
+smtpd_recipient_restrictions = check_recipient_access hash:/etc/postfix/denydstdomains, permit_mynetworks, reject_unauth_destination
+
+(4)让postfix重新载入配置文件即可进行发信控制的效果测试了。
+
+4、检查表格式的说明
+
+hash类的检查表都使用类似如下的格式：
+pattern   action
+
+检查表文件中，空白行、仅包含空白字符的行和以#开头的行都会被忽略。以空白字符开头后跟其它非空白字符的行会被认为是前一行的延续，是一行的组成部分。
+
+(1)关于pattern
+其pattern通常有两类地址：邮件地址和主机名称/地址。
+
+邮件地址的pattern格式如下：
+user@domain  用于匹配指定邮件地址；
+domain.tld   用于匹配以此域名作为邮件地址中的域名部分的所有邮件地址；
+user@ 			 用于匹配以此作为邮件地址中的用户名部分的所有邮件地址；
+
+主机名称/地址的pattern格式如下：
+domain.tld   用于匹配指定域及其子域内的所有主机；
+.domain.tld   用于匹配指定域的子域内的所有主机；
+net.work.addr.ess
+net.work.addr
+net.work
+net        用于匹配特定的IP地址或网络内的所有主机；
+network/mask  CIDR格式，匹配指定网络内的所有主机；
+
+(2)关于action
+
+接受类的动作：
+OK   接受其pattern匹配的邮件地址或主机名称/地址；
+全部由数字组成的action   隐式表示OK；
+
+拒绝类的动作(部分)：
+4NN text 
+5NN text 
+    其中4NN类表示过一会儿重试；5NN类表示严重错误，将停止重试邮件发送；421和521对于postfix来说有特殊意义，尽量不要自定义这两个代码；
+REJECT optional text...   拒绝；text为可选信息；
+DEFER optional text...    拒绝；text为可选信息； 
+
+
+七、为postfix开启基于cyrus-sasl的认证功能
+
+使用以下命令验正postfix是否支持cyrus风格的sasl认证，如果您的输出为以下结果，则是支持的：
+# postconf -a
+cyrus
+dovecot
+
+#vi /etc/postfix/main.cf
+添加以下内容：
+############################CYRUS-SASL############################
+broken_sasl_auth_clients = yes
+smtpd_recipient_restrictions=permit_mynetworks,permit_sasl_authenticated,reject_invalid_hostname,reject_non_fqdn_hostname,reject_unknown_sender_domain,reject_non_fqdn_sender,reject_non_fqdn_recipient,reject_unknown_recipient_domain,reject_unauth_pipelining,reject_unauth_destination
+smtpd_sasl_auth_enable = yes
+smtpd_sasl_local_domain = $myhostname
+smtpd_sasl_security_options = noanonymous
+smtpd_sasl_application_name = smtpd
+smtpd_banner = Welcome to our $myhostname ESMTP,Warning: Version not Available!
+
+#vim /usr/lib/sasl2/smtpd.conf
+添加如下内容：
+pwcheck_method: saslauthd
+mech_list: PLAIN LOGIN
+
+让postfix重新加载配置文件
+#/usr/sbin/postfix reload
+
+# telnet localhost 25
+Trying 127.0.0.1...
+Connected to localhost.localdomain (127.0.0.1).
+Escape character is '^]'.
+220 Welcome to our mail.magedu.com ESMTP,Warning: Version not Available!
+ehlo mail.magedu.com
+250-mail.magedu.com
+250-PIPELINING
+250-SIZE 10240000
+250-VRFY
+250-ETRN
+250-AUTH PLAIN LOGIN
+250-AUTH=PLAIN LOGIN               （请确保您的输出以类似两行）
+250-ENHANCEDSTATUSCODES
+250-8BITMIME
+250 DSN
+
+八、安装Courier authentication library
+
+1、courier简介
+
+courier-authlib是Courier组件中的认证库，它是courier组件中一个独立的子项目，用于为Courier的其它组件提供认证服务。其认证功能通常包括验正登录时的帐号和密码、获取一个帐号相关的家目录或邮件目录等信息、改变帐号的密码等。而其认证的实现方式也包括基于PAM通过/etc/passwd和/etc/shadow进行认证，基于GDBM或DB进行认证，基于LDAP/MySQL/PostgreSQL进行认证等。因此，courier-authlib也常用来与courier之外的其它邮件组件(如postfix)整合为其提供认证服务。
+
+2、安装
+
+安装前说明：本文中使用的mysql是非rpm包的安装方式安装出来的，请确保你的系统上没有其它的mysql相关的rpm包，否则为courier-authlib执行configure时会报错。如果系统安装了rpm格式的mysql客户端，得事先卸载此mysql客户端；可以在编译courier-authlib完成之后再安装之。
+
+接下来开始编译安装
+# tar jxvf courier-authlib-0.62.4.tar.bz2
+# cd courier-authlib-0.62.4
+#./configure \
+    --prefix=/usr/local/courier-authlib \
+    --sysconfdir=/etc \
+    --without-authpam \
+    --without-authshadow \
+    --without-authvchkpw \
+    --without-authpgsql \
+    --with-authmysql=/usr/local/mysql \
+    --with-mysql-libs=/usr/local/mysql/lib \
+    --with-mysql-includes=/usr/local/mysql/include \
+    --with-redhat \
+    --with-authmysqlrc=/etc/authmysqlrc \
+    --with-authdaemonrc=/etc/authdaemonrc \
+    --with-mailuser=postfix \
+    --with-mailgroup=postfix \
+    --with-ltdl-lib=/usr/lib \
+    --with-ltdl-include=/usr/include
+# make
+# make install
+
+# chmod 755 /usr/local/courier-authlib/var/spool/authdaemon
+# cp /etc/authdaemonrc.dist  /etc/authdaemonrc
+# cp /etc/authmysqlrc.dist  /etc/authmysqlrc
+
+修改/etc/authdaemonrc 文件
+authmodulelist="authmysql"
+authmodulelistorig="authmysql"
+daemons=10
+
+3、配置其通过mysql进行邮件帐号认证
+
+编辑/etc/authmysqlrc 为以下内容，其中2525，2525 为postfix 用户的UID和GID。
+MYSQL_SERVER localhost
+MYSQL_PORT 3306                   (指定你的mysql监听的端口，这里使用默认的3306)
+MYSQL_USERNAME  extmail      (这时为后文要用的数据库的所有者的用户名)
+MYSQL_PASSWORD extmail        (密码)
+MYSQL_SOCKET  /tmp/mysql.sock
+MYSQL_DATABASE  extmail
+MYSQL_USER_TABLE  mailbox
+MYSQL_CRYPT_PWFIELD  password
+MYSQL_UID_FIELD  '2525'
+MYSQL_GID_FIELD  '2525'
+MYSQL_LOGIN_FIELD  username
+MYSQL_HOME_FIELD  concat('/var/mailbox/',homedir)
+MYSQL_NAME_FIELD  name
+MYSQL_MAILDIR_FIELD  concat('/var/mailbox/',maildir)
+
+4、提供SysV服务脚本
+
+# cp courier-authlib.sysvinit /etc/rc.d/init.d/courier-authlib
+# chmod 755 /etc/init.d/courier-authlib
+# chkconfig --add courier-authlib
+# chkconfig --level 2345 courier-authlib on
+
+#echo "/usr/local/courier-authlib/lib/courier-authlib" >> /etc/ld.so.conf.d/courier-authlib.conf
+# ldconfig -v
+# service courier-authlib start   (启动服务)
+
+5、整合postfix和courier-authlib
+
+新建虚拟用户邮箱所在的目录，并将其权限赋予postfix用户：
+#mkdir –pv /var/mailbox
+#chown –R postfix /var/mailbox
+
+接下来重新配置SMTP 认证，编辑 /usr/lib/sasl2/smtpd.conf ，确保其为以下内容：
+pwcheck_method: authdaemond
+log_level: 3
+mech_list:PLAIN LOGIN
+authdaemond_path:/usr/local/courier-authlib/var/spool/authdaemon/socket
+
+九、让postfix支持虚拟域和虚拟用户
+
+1、编辑/etc/postfix/main.cf，添加如下内容：
+########################Virtual Mailbox Settings########################
+virtual_mailbox_base = /var/mailbox
+virtual_mailbox_maps = mysql:/etc/postfix/mysql_virtual_mailbox_maps.cf
+virtual_mailbox_domains = mysql:/etc/postfix/mysql_virtual_domains_maps.cf
+virtual_alias_domains =
+virtual_alias_maps = mysql:/etc/postfix/mysql_virtual_alias_maps.cf
+virtual_uid_maps = static:2525
+virtual_gid_maps = static:2525
+virtual_transport = virtual
+maildrop_destination_recipient_limit = 1
+maildrop_destination_concurrency_limit = 1
+##########################QUOTA Settings########################
+message_size_limit = 14336000
+virtual_mailbox_limit = 20971520
+virtual_create_maildirsize = yes
+virtual_mailbox_extended = yes
+virtual_mailbox_limit_maps = mysql:/etc/postfix/mysql_virtual_mailbox_limit_maps.cf
+virtual_mailbox_limit_override = yes
+virtual_maildir_limit_message = Sorry, the user's maildir has overdrawn his diskspace quota, please Tidy your mailbox and try again later.
+virtual_overquota_bounce = yes
+
+2、使用extman源码目录下docs目录中的extmail.sql和init.sql建立数据库：
+
+# tar zxvf  extman-1.1.tar.gz
+# cd extman-1.1/docs
+# mysql -u root -p < extmail.sql
+# mysql -u root -p <init.sql
+# cp mysql*  /etc/postfix/
+
+3、授予用户extmail访问extmail数据库的权限
+mysql> GRANT all privileges on extmail.* TO extmail@localhost IDENTIFIED BY 'extmail';
+mysql> GRANT all privileges on extmail.* TO extmail@127.0.0.1 IDENTIFIED BY 'extmail';
+
+说明：启用虚拟域以后，需要取消中心域，即注释掉myhostname, mydestination, mydomain, myorigin几个指令；当然，你也可以把mydestionation的值改为你自己需要的。
+
+十、配置dovecot
+
+# vi /etc/dovecot.conf
+mail_location = maildir:/var/mailbox/%d/%n/Maildir
+……
+auth default {
+    mechanisms = plain
+    passdb sql {
+        args = /etc/dovecot-mysql.conf
+    }
+    userdb sql {
+        args = /etc/dovecot-mysql.conf
+    }
+    ……
+
+# vim /etc/dovecot-mysql.conf                 
+driver = mysql
+connect = host=/tmp/mysql.sock dbname=extmail user=extmail password=extmail
+default_pass_scheme = CRYPT
+password_query = SELECT username AS user,password AS password FROM mailbox WHERE username = '%u'                            
+user_query = SELECT maildir, uidnumber AS uid, gidnumber AS gid FROM mailbox WHERE username = '%u'
+
+接下来启动dovecot服务：
+
+# service dovecot start
+# chkconfig dovecot on
+
+
+
+十一、安装Extmail-1.2
+
+1、安装
+# tar zxvf extmail-1.2.tar.gz
+# mkdir -pv /var/www/extsuite
+# mv extmail-1.2 /var/www/extsuite/extmail
+# cp /var/www/extsuite/extmail/webmail.cf.default  /var/www/extsuite/extmail/webmail.cf
+
+2、修改主配置文件
+#vi /var/www/extsuite/extmail/webmail.cf
+
+部分修改选项的说明：
+
+SYS_MESSAGE_SIZE_LIMIT = 5242880
+用户可以发送的最大邮件
+
+SYS_USER_LANG = en_US
+语言选项，可改作：
+SYS_USER_LANG = zh_CN
+
+SYS_MAILDIR_BASE = /home/domains
+此处即为您在前文所设置的用户邮件的存放目录，可改作：
+SYS_MAILDIR_BASE = /var/mailbox
+
+SYS_MYSQL_USER = db_user
+SYS_MYSQL_PASS = db_pass
+以上两句句用来设置连接数据库服务器所使用用户名、密码和邮件服务器用到的数据库，这里修改为：
+SYS_MYSQL_USER = extmail
+SYS_MYSQL_PASS = extmail
+
+SYS_MYSQL_SOCKET = /var/lib/mysql/mysql.sock
+修改为：
+SYS_MYSQL_SOCKET = /tmp/mysql.sock
+
+SYS_MYSQL_HOST = localhost
+指明数据库服务器主机名，这里默认即可
+
+SYS_MYSQL_TABLE = mailbox
+SYS_MYSQL_ATTR_USERNAME = username
+SYS_MYSQL_ATTR_DOMAIN = domain
+SYS_MYSQL_ATTR_PASSWD = password
+
+以上用来指定验正用户登录里所用到的表，以及用户名、域名和用户密码分别对应的表中列的名称；这里默认即可
+
+SYS_AUTHLIB_SOCKET = /var/spool/authdaemon/socket
+此句用来指明authdaemo socket文件的位置，这里修改为：
+SYS_AUTHLIB_SOCKET = /usr/local/courier-authlib/var/spool/authdaemon/socket
+
+
+3、apache相关配置
+
+由于extmail要进行本地邮件的投递操作，故必须将运行apache服务器用户的身份修改为您的邮件投递代理的用户；本例中打开了apache服务器的suexec功能，故使用以下方法来实现虚拟主机运行身份的指定。此例中的MDA为postfix自带，因此将指定为postfix用户：
+<VirtualHost *:80>
+ServerName mail.magedu.com
+DocumentRoot /var/www/extsuite/extmail/html/
+ScriptAlias /extmail/cgi /var/www/extsuite/extmail/cgi
+Alias /extmail /var/www/extsuite/extmail/html
+SuexecUserGroup postfix postfix
+</VirtualHost>
+
+修改 cgi执行文件属主为apache运行身份用户：
+# chown -R postfix.postfix /var/www/extsuite/extmail/cgi/
+
+如果您没有打开apache服务器的suexec功能,也可以使用以下方法解决：
+# vi /etc/httpd/conf/httpd.conf
+User postfix
+Group postfix
+
+<VirtualHost *:80>
+ServerName mail.magedu.com
+DocumentRoot /var/www/extsuite/extmail/html/
+ScriptAlias /extmail/cgi /var/www/extsuite/extmail/cgi
+Alias /extmail /var/www/extsuite/extmail/html
+</VirtualHost>
+
+4、依赖关系的解决
+
+extmail将会用到perl的Unix::syslogd功能，您可以去http://search.cpan.org搜索下载原码包进行安装。
+# tar zxvf Unix-Syslog-0.100.tar.gz
+# cd Unix-Syslog-0.100
+# perl Makefile.PL
+# make
+# make install
+
+5、启动apache服务
+# service httpd start
+# chkconfig httpd on
+
+
+
+十二、安装Extman-1.1
+
+1、安装及基本配置
+
+# tar zxvf  extman-1.1.tar.gz
+# mv extman-1.1 /var/www/extsuite/extman
+
+修改配置文件以符合本例的需要：
+# cp /var/www/extsuite/extman/webman.cf.default  /var/www/extsuite/extman/webman.cf
+# vi /var/www/extsuite/extman/webman.cf
+
+SYS_MAILDIR_BASE = /home/domains
+此处即为您在前文所设置的用户邮件的存放目录，可改作：
+SYS_MAILDIR_BASE = /var/mailbox
+
+SYS_DEFAULT_UID = 1000
+SYS_DEFAULT_GID = 1000
+此两处后面设定的ID号需更改为前而创建的postfix用户和postfix组的id号，本文使用的是2525，因此，上述两项需要修改为：
+SYS_DEFAULT_UID = 2525
+SYS_DEFAULT_GID = 2525
+
+SYS_MYSQL_USER = webman
+SYS_MYSQL_PASS = webman
+修改为：
+SYS_MYSQL_USER = extmail
+SYS_MYSQL_PASS = extmail
+
+SYS_MYSQL_SOCKET = /var/lib/mysql/mysql.sock
+修改为：
+SYS_MYSQL_SOCKET = /tmp/mysql.sock
+
+而后修改cgi目录的属主：
+# chown -R postfix.postfix /var/www/extsuite/extman/cgi/
+
+在apache的主配置文件中Extmail的虚拟主机部分，添加如下两行：
+ScriptAlias /extman/cgi /var/www/extsuite/extman/cgi
+Alias /extman /var/www/extsuite/extman/html
+
+创建其运行时所需的临时目录，并修改其相应的权限：
+#mkdir  -pv  /tmp/extman
+#chown postfix.postfix  /tmp/extman
+
+修改
+SYS_CAPTCHA_ON = 1
+为
+SYS_CAPTCHA_ON = 0
+
+好了，到此为止，重新启动apache服务器后，您的Webmail和Extman已经可以使用了，可以在浏览器中输入指定的虚拟主机的名称进行访问，如下：
+http://mail.magedu.com
+
+选择管理即可登入extman进行后台管理了。默认管理帐号为：root@extmail.org  密码为：extmail*123*
+
+说明：
+(1) 如果您安装后无法正常显示校验码，安装perl-GD模块会解决这个问题。如果想简单，您可以到以下地址下载适合您的平台的rpm包，安装即可：  http://dries.ulyssis.org/rpm/packages/perl-GD/info.html
+(2) extman-1.1自带了图形化显示日志的功能；此功能需要rrdtool的支持，您需要安装此些模块才可能正常显示图形日志。
+
+
+2、配置Mailgraph_ext，使用Extman的图形日志：（下面所需的软件包面要自己下载）
+
+接下来安装图形日志的运行所需要的软件包Time::HiRes、File::Tail和rrdtool，其中前两个包您可以去http://search.cpan.org搜索并下载获得，后一个包您可以到 http://oss.oetiker.ch/rrdtool/pub/?M=D下载获得； 注意安装顺序不能改换。
+
+安装Time::HiRes
+#tar zxvf Time-HiRes-1.9707.tar.gz
+#cd Time-HiRes-1.9707
+#perl Makefile.PL
+#make
+#make test
+#make install
+
+安装File::Tail
+#tar zxvf File-Tail-0.99.3.tar.gz
+#cd File-Tail-0.99.3
+#perl Makefile
+#make
+#make test
+#make install
+
+安装rrdtool-1.2.23
+#tar zxvf rrdtool-1.2.23.tar.gz
+#cd rrdtool-1.2.23
+#./configure --prefix=/usr/local/rrdtool
+#make
+#make install
+
+创建必要的符号链接(Extman会到这些路径下找相关的库文件)
+#ln -sv /usr/local/rrdtool/lib/perl/5.8.5/i386-linux-thread-multi/auto/RRDs/RRDs.so   /usr/lib/perl5/5.8.5/i386-linux-thread-multi/
+#ln -sv /usr/local/rrdtool/lib/perl/5.8.5/RRDp.pm   /usr/lib/perl5/5.8.5
+#ln -sv /usr/local/rrdtool/lib/perl/5.8.5/i386-linux-thread-multi/RRDs.pm   /usr/lib/perl5/5.8.5
+
+复制mailgraph_ext到/usr/local，并启动之
+# cp -r /var/www/extsuite/extman/addon/mailgraph_ext  /usr/local  
+# /usr/local/mailgraph_ext/mailgraph-init start 
+
+启动cmdserver(在后台显示系统信息) 
+# /var/www/extsuite/extman/daemon/cmdserver --daemon
+
+添加到自动启动队列
+# echo “/usr/local/mailgraph_ext/mailgraph-init start” >> /etc/rc.d/rc.local
+# echo “/var/www/extsuite/extman/daemon/cmdserver -v -d” >> /etc/rc.d/rc.local 
+
+使用方法： 等待大约15分钟左右，如果邮件系统有一定的流量，即可登陆到extman里，点“图形日志”即可看到图形化的日志。具体每天，周，月，年的则点击相应的图片进入即可。 
+

@@ -1,0 +1,9 @@
+mkisofs -r -J -T -V "rhel5-boot.iso" -o /root/rhel5-boot.iso -b isolinux/isolinux.bin -c isolinux/boot.cat -no-emul-boot -boot-load-size 4 -boot-info-table ./boot/
+
+-V<光盘ID>或-volid<光盘ID>   指定光盘的卷册集ID
+-o<映像文件>或-output<映像文件>   指定映像文件的名称
+-J或-joliet   使用Joliet格式的目录与文件名称
+-c<启动文件名称>   制作可启动光盘时，mkisofs会将启动映像文件中的全-eltorito-catalog<启动文件名称>全部内容作成一个文件
+-b<启动映像文件>或-eltorito-boot<启动映像文件>   指定在制作可启动光盘时所需的启动映像文件
+-r或-rational-rock   使用Rock Ridge Extensions，并开放全部文件的读取权限
+-T或-translation-table   建立文件名的转换表，适用于不支持Rock Ridge Extensions的系统上
